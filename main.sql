@@ -27,7 +27,7 @@ BEGIN
         RAISE EXCEPTION 'Slovenia boundary (slo_meja) not found';
     END IF;
 
-    RAISE NOTICE 'step 1', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+    RAISE NOTICE 'step 1 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
     v_step_time := clock_timestamp();
 
     -- ========================================================================
@@ -43,23 +43,36 @@ BEGIN
         v_hole_geom := OLD.geom;
 
         -- Remove all remaining geometries from this potential hole
-        SELECT ST_Difference(
-            v_hole_geom,
-            COALESCE(ST_Union(geom), ST_GeomFromText('GEOMETRYCOLLECTION EMPTY'))
-        )
-        INTO v_hole_geom
-        FROM md_geo_obm
-        WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
-          AND id != OLD.id
-          AND geom IS NOT NULL;
+--         SELECT ST_Difference(
+--             v_hole_geom,
+--             COALESCE(ST_Union(geom), ST_GeomFromText('GEOMETRYCOLLECTION EMPTY'))
+--         )
+--         INTO v_hole_geom
+--         FROM md_geo_obm
+--         WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
+--           AND id != OLD.id
+--           AND geom IS NOT NULL;
 
-        RAISE NOTICE 'step 2', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+        SELECT ST_Difference(
+            v_hole_geom, (
+                SELECT ST_Union(geom)
+                FROM md_geo_obm
+                WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
+                    AND id != OLD.id
+                    AND geom IS NOT NULL
+--                     AND geom && v_hole_geom  -- Fast bbox check. Because v_hole_geom is a variable, planner might not use it otherwise.
+                    AND ST_Intersects(geom, v_hole_geom)
+            )
+        ) INTO v_hole_geom;
+
+
+        RAISE NOTICE 'step 2 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
         v_step_time := clock_timestamp();
 
         -- Ensure the hole is within Slovenia
         v_hole_geom := ST_Intersection(v_hole_geom, v_slo_meja);
 
-        RAISE NOTICE 'step 3', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+        RAISE NOTICE 'step 3 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
         v_step_time := clock_timestamp();
 
         -- Process the hole if it exists
@@ -75,7 +88,7 @@ BEGIN
             INTO v_hole_geom
             FROM overlapping_holes;
 
-            RAISE NOTICE 'step 4', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+            RAISE NOTICE 'step 4 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
             v_step_time := clock_timestamp();
 
             -- Delete overlapping holes (we'll insert the merged one)
@@ -83,17 +96,40 @@ BEGIN
             WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
               AND ST_Intersects(geom, OLD.geom);
 
-            RAISE NOTICE 'step 5', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+            RAISE NOTICE 'step 5 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
             v_step_time := clock_timestamp();
 
             -- Insert the merged hole(s)
             IF v_hole_geom IS NOT NULL AND NOT ST_IsEmpty(v_hole_geom) THEN
-                INSERT INTO topoloske_vrzeli (id_rel_geo_verzija, geom)
-                SELECT v_id_rel_geo_verzija, (ST_Dump(v_hole_geom)).geom;
+--                 INSERT INTO topoloske_vrzeli (id_rel_geo_verzija, geom)
+--                 SELECT v_id_rel_geo_verzija, (ST_Dump(v_hole_geom)).geom;
+
+                INSERT INTO topoloske_vrzeli (
+                    id_rel_geo_verzija,
+                    geom,
+                    perimeter,
+                    area,
+                    area_type,
+                    created_by,
+                    id,
+                    created_at
+                )
+                SELECT
+                    v_id_rel_geo_verzija,
+                    hole_geom,
+                    -1,
+                    ST_Area(hole_geom),
+                    'obm',
+                    '848956e8-d73e-11f0-9ff0-02420a000f64',
+                    uuid_generate_v4(),
+                    now()::timestamp
+                FROM (SELECT (ST_Dump(v_hole_geom)).geom AS hole_geom) AS dump;
+
+
             END IF;
         END IF;
 
-        RAISE NOTICE 'step 6', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+        RAISE NOTICE 'step 6 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
         v_step_time := clock_timestamp();
 
         -- --------------------------------------------------------------------
@@ -107,6 +143,9 @@ BEGIN
               AND id != OLD.id
               AND ST_Intersects(geom, OLD.geom)
               AND NOT ST_Touches(geom, OLD.geom);
+
+            RAISE NOTICE 'step 7 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+            v_step_time := clock_timestamp();
 
             -- For each previously intersecting geometry, check if it still intersects anything
             IF v_intersecting_ids IS NOT NULL THEN
@@ -125,7 +164,8 @@ BEGIN
     END IF;
 
 
-
+    RAISE NOTICE 'step 8 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+    v_step_time := clock_timestamp();
 
     -- ========================================================================
     -- PHASE 2: HANDLE ADDITION (INSERT or UPDATE)
@@ -155,6 +195,9 @@ BEGIN
           AND ST_Intersects(geom, NEW.geom)
           AND NOT ST_Touches(geom, NEW.geom);
 
+        RAISE NOTICE 'step 9 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+        v_step_time := clock_timestamp();
+
         IF v_intersecting_ids IS NOT NULL AND array_length(v_intersecting_ids, 1) > 0 THEN
             NEW.intersecting := TRUE;
 
@@ -162,6 +205,10 @@ BEGIN
             UPDATE md_geo_obm
             SET intersecting = TRUE
             WHERE id = ANY(v_intersecting_ids);
+
+            RAISE NOTICE 'step 10 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+            v_step_time := clock_timestamp();
+
         END IF;
 
 
@@ -177,6 +224,9 @@ BEGIN
             reduced_geom geometry
         ) ON COMMIT DROP;
 
+        RAISE NOTICE 'step 11 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+        v_step_time := clock_timestamp();
+
         INSERT INTO holes_to_update
         SELECT
             id,
@@ -184,6 +234,10 @@ BEGIN
         FROM topoloske_vrzeli
         WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
           AND ST_Intersects(geom, NEW.geom) AND NOT st_touches(geom, NEW.geom);
+
+
+        RAISE NOTICE 'step 12 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+        v_step_time := clock_timestamp();
 
         -- - If completely covered: delete them
         DELETE FROM topoloske_vrzeli
@@ -193,10 +247,15 @@ BEGIN
                 WHERE ST_IsEmpty(h.reduced_geom)  --very fast op
             );
 
+        RAISE NOTICE 'step 13 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+        v_step_time := clock_timestamp();
+
 
 
         -- - If partially covered: replace with reduced geometry
         -- (may get multipolygon from polygon - could potentially split into multiple with ST_Dump)
+
+
         -- Update holes that remain as single polygons
         UPDATE topoloske_vrzeli t
         SET geom = h.reduced_geom
@@ -204,6 +263,9 @@ BEGIN
         WHERE t.id = h.id
           AND NOT ST_IsEmpty(h.reduced_geom)
           AND ST_NumGeometries(h.reduced_geom) = 1;  -- Single polygon
+
+        RAISE NOTICE 'step 14 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+        v_step_time := clock_timestamp();
 
         -- Delete holes that split into multiple
         DELETE FROM topoloske_vrzeli
@@ -213,6 +275,9 @@ BEGIN
             WHERE NOT ST_IsEmpty(reduced_geom)
               AND ST_NumGeometries(reduced_geom) > 1
         );
+
+        RAISE NOTICE 'step 15 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+        v_step_time := clock_timestamp();
 
         -- Insert the split holes
         INSERT INTO topoloske_vrzeli (
@@ -228,7 +293,7 @@ BEGIN
         SELECT
             v_id_rel_geo_verzija,
             hole_geom,
-            ST_Perimeter(hole_geom),
+            -1, -- ST_Perimeter(hole_geom),
             ST_Area(hole_geom),
             'obm',
             '848956e8-d73e-11f0-9ff0-02420a000f64',
@@ -238,6 +303,10 @@ BEGIN
         LATERAL (SELECT (ST_Dump(reduced_geom)).geom AS hole_geom) AS dump
         WHERE NOT ST_IsEmpty(reduced_geom)
           AND ST_NumGeometries(reduced_geom) > 1;
+
+
+        RAISE NOTICE 'step 16 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+        v_step_time := clock_timestamp();
 
 
 
@@ -254,13 +323,13 @@ END;
 $$;
 
 
-
 DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm;
 
 CREATE TRIGGER trg_validate_topology_incremental
-    BEFORE INSERT OR UPDATE OR DELETE ON md_geo_obm
+    BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
     FOR EACH ROW
     EXECUTE FUNCTION validate_topology_incremental();
+
 
 select * from md_geo_obm where id = 'f68b2b55-1d3f-4693-9a39-25abdc7f3f5c';
 
@@ -551,6 +620,10 @@ $$;
 SELECT * FROM revalidate_topology('20a6ad30-8457-41c9-8fbd-5423c15dae9b'::uuid);
 
 SELECT * FROM revalidate_topology('2647f13d-faea-4f37-9309-3ab8639457f1'::uuid);
+
+SELECT * FROM revalidate_topology('99d0e803-9ff2-40e3-822b-995289ee60d6'::uuid);
+
+3,33,33,1042
 
 
 -- Example 2: Revalidate all versions
