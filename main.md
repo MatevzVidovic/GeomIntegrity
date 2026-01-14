@@ -66,10 +66,7 @@ Names:    V preseku, Izven mej Slovenije
 
 - Make slo_meja attribute table from SQL, and then make a layer from it:
 
-
 The first way is the way to go, I think:
-
-
 
 SELECT
     uuid_generate_v4() AS id,
@@ -78,6 +75,72 @@ SELECT
     )::geometry(Polygon,3794) AS geom
 FROM kn_nep_rpe_obcine_h
 WHERE (kn_nep_rpe_obcine_h.postopek_id_do IS NULL);
+
+
+But lets also make slo_meja_direct_tur
+
+SELECT
+    uuid_generate_v4() AS id,
+    ST_MakePolygon(
+        ST_ExteriorRing(ST_Union(md_geo_obm.geom))
+    )::geometry(Polygon,3794) AS geom
+FROM md_geo_obm
+WHERE id_rel_geo_verzija = '4ac443cc-eb0e-46b9-bcab-a5646448e407';
+
+
+
+
+
+
+
+
+
+- Make new layer   topoloske_vrzeli
+And add fields: area_type text (obm, cona, lao, tao),  id_rel_geo_verzija, area, perimeter
+Names: Vrsta področja,  id_rel_geo_verzija, površina, obseg
+
+
+
+- make full validation fn
+- make trigger fn
+- set trigger
+
+
+topoloske_kontrole_test
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Other alternatives for slovenia boundary:
 
 
 SELECT
@@ -114,52 +177,6 @@ SELECT
     )::geometry(Polygon,3794) AS geom
 FROM md_geo_obm
 WHERE id_rel_geo_verzija = '2647f13d-faea-4f37-9309-3ab8639457f1';
-
-
-
-
-
-- Make new layer   topoloske_vrzeli
-And add fields: area_type text (obm, cona, lao, tao),  id_rel_geo_verzija, area, perimeter
-Names: Vrsta področja,  id_rel_geo_verzija, površina, obseg
-
-
-
-- make full validation fn
-- make trigger fn
-- set trigger
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
