@@ -134,17 +134,19 @@ BEGIN
         FOR neighbor_record IN
             SELECT
                 obm.id,
-                ST_Length(
+--                 ST_Length(
+--                         st_perimeter(
+                st_area(
                     ST_Intersection(
-                        ST_Boundary(hole_record.geom),
-                        ST_Boundary(obm.geom)
+                        st_buffer(hole_record.geom, 1),
+                        obm.geom
                     )
                 ) as shared_length
             FROM md_geo_obm obm
             WHERE obm.id_rel_geo_verzija = hole_record.id_rel_geo_verzija
                 AND ST_Intersects(
-                    ST_Boundary(hole_record.geom),
-                    ST_Boundary(obm.geom)
+                    st_buffer(hole_record.geom, 10),
+                    obm.geom
                 )
         LOOP
             -- Track the neighbor with the longest shared boundary
@@ -157,12 +159,10 @@ BEGIN
         -- If we found a neighbor, union the hole with it
         IF best_neighbor_id IS NOT NULL THEN
             UPDATE md_geo_obm
-            SET geom = ST_Multi(
-                    ST_Union(
+            SET geom = ST_Union(
                         geom,
                         (SELECT geom FROM md_topoloske_kontrole WHERE id = hole_record.id)
                     )
-                )
             WHERE id = best_neighbor_id;
 
             -- Delete the hole from md_topoloske_kontrole

@@ -47,6 +47,12 @@ SELECT geom
 FROM obm_union_of_all;
 
 
+
+CREATE MATERIALIZED VIEW slo_meja as
+SELECT st_reduceprecision(st_union(geom), 0.01) as geom
+FROM md_geo_obm;
+
+
 select * from validate_all_topologies();
 
 
