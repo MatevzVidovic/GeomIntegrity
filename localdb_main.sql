@@ -1,9 +1,102 @@
 
 
+
+
+
+TRUNCATE table md_geo_obm;
+
+INSERT INTO md_geo_obm
+SELECT *
+FROM md_geo_obm_2;
+
+select * from set_to_2_decimal_places();
+select * from validate_2_decimal_places();
+
+
+--
+-- DROP MATERIALIZED VIEW obm_unions_cleaned;
+--
+-- CREATE MATERIALIZED VIEW obm_unions_cleaned as
+-- SELECT id_rel_geo_verzija, st_union(geom) as geom
+-- FROM md_geo_obm
+-- GROUP BY id_rel_geo_verzija;
+--
+--
+-- DROP MATERIALIZED VIEW obm_unions_cleaned_union;
+--
+-- CREATE MATERIALIZED VIEW obm_unions_cleaned_union as
+-- SELECT st_union(geom) as geom
+-- FROM obm_unions_cleaned;
+
+
+
+DROP MATERIALIZED VIEW slo_meja;
+DROP MATERIALIZED VIEW obm_union_of_all;
+
+-- CREATE MATERIALIZED VIEW obm_union_of_all as
+-- SELECT st_union(geom) as geom
+-- FROM md_geo_obm;
+
+CREATE MATERIALIZED VIEW obm_union_of_all as
+SELECT st_reduceprecision(st_union(geom), 0.01) as geom
+FROM md_geo_obm;
+
+
+CREATE MATERIALIZED VIEW slo_meja as
+SELECT geom
+FROM obm_union_of_all;
+
+
+select * from validate_all_topologies();
+
+
+
+
+select * from fix_holes();
+select * from fix_overflows();
+
+select * from validate_all_topologies();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+SELECT id, st_astext(geom), area
+    FROM md_topoloske_kontrole
+        WHERE id1 ='d9c2ff3b-2e3f-4818-9a83-43853756754e';
+
+
+
+
+SELECT id, st_astext(geom)
+    FROM md_geo_obm
+ORDER BY random()
+LIMIT 1;
+
+
+
+
+
+
+
 alter table md_geo_obm
     rename to md_geo_obm_somehowcleanbutshouldntbe;
 
 
+select geom from md_geo_obm where id = '82952392-117e-440a-b2c2-437c6d4d10d8';
+
+select geom from md_geo_obm where id = 'daf4c9d0-2138-446c-a19c-5f524a4f7409';
+
+SELECT PostGIS_Full_Version();
 
 
 DO $$
@@ -19,12 +112,12 @@ BEGIN
     LOOP
 
         IF
-            TRUE
---             'NULL' != (SELECT array_agg(m[1])::text
---            FROM regexp_matches(st_astext(st_snaptogrid(rec.geom, 0.01)), '\d+\.\d{3,}', 'g') AS m)
---             OR
---            'NULL' != (SELECT array_agg(m[1])::text
---            FROM regexp_matches(st_astext(st_reduceprecision(rec.geom, 0.01)), '\d+\.\d{3,}', 'g') AS m)
+--             TRUE
+            'NULL' != (SELECT array_agg(m[1])::text
+           FROM regexp_matches(st_astext(st_snaptogrid(rec.geom, 0.01)), '\d+\.\d{3,}', 'g') AS m)
+            OR
+           'NULL' != (SELECT array_agg(m[1])::text
+           FROM regexp_matches(st_astext(st_reduceprecision(rec.geom, 0.01)), '\d+\.\d{3,}', 'g') AS m)
 
         THEN
 
