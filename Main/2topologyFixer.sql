@@ -111,7 +111,10 @@
 -- For each hole, find the geometry in md_geo_obm that shares the largest border
 -- with it, union them together, and delete the hole from md_topoloske_kontrole
 
-DO $$
+CREATE OR REPLACE FUNCTION fix_holes()
+RETURNS void
+LANGUAGE plpgsql
+AS $$
 DECLARE
     hole_record RECORD;
     neighbor_record RECORD;
@@ -159,14 +162,13 @@ BEGIN
                         geom,
                         (SELECT geom FROM md_topoloske_kontrole WHERE id = hole_record.id)
                     )
-                ),
-                updated_at = NOW()
+                )
             WHERE id = best_neighbor_id;
 
             -- Delete the hole from md_topoloske_kontrole
             DELETE FROM md_topoloske_kontrole WHERE id = hole_record.id;
 
-            RAISE NOTICE 'Fixed hole % by merging with neighbor %', hole_record.id, best_neighbor_id;
+--             RAISE NOTICE 'Fixed hole % by merging with neighbor %', hole_record.id, best_neighbor_id;
         ELSE
             RAISE WARNING 'No neighbor found for hole %', hole_record.id;
         END IF;
@@ -180,7 +182,10 @@ END $$;
 -- For each overflow, subtract it from the relevant geometry in md_geo_obm
 -- and delete the overflow from md_topoloske_kontrole
 
-DO $$
+CREATE OR REPLACE FUNCTION fix_overflows()
+RETURNS void
+LANGUAGE plpgsql
+AS $$
 DECLARE
     overflow_record RECORD;
 BEGIN
@@ -199,15 +204,13 @@ BEGIN
                         geom,
                         (SELECT geom FROM md_topoloske_kontrole WHERE id = overflow_record.id)
                     )
-                ),
-                updated_at = NOW(),
-                overflowing = FALSE
+                )
             WHERE id = overflow_record.id1;
 
             -- Delete the overflow from md_topoloske_kontrole
             DELETE FROM md_topoloske_kontrole WHERE id = overflow_record.id;
 
-            RAISE NOTICE 'Fixed overflow % by subtracting from geometry %', overflow_record.id, overflow_record.id1;
+--             RAISE NOTICE 'Fixed overflow % by subtracting from geometry %', overflow_record.id, overflow_record.id1;
         ELSE
             RAISE WARNING 'No id1 found for overflow %', overflow_record.id;
         END IF;
