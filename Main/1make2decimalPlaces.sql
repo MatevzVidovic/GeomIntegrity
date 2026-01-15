@@ -19,7 +19,8 @@ BEGIN
 --         SELECT 1 as id, geom
 --         FROM slo_meja
         SELECT id, geom
-        FROM md_geo_obm
+        FROM md_topoloske_kontrole
+--         FROM md_geo_obm
         ORDER BY random()
     LOOP
         IF

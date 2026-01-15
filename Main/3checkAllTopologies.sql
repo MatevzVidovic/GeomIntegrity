@@ -74,13 +74,17 @@ BEGIN
             4*pi()*area / NULLIF(perimeter * perimeter, 0)   -- (circle has it 0.08 (1/4*pi) and is most compact. Everything else is less compact.)
         FROM (
             SELECT
-                (dump_result).geom as geom,
-                ST_Perimeter((dump_result).geom) as perimeter,
+                geom,
+                ST_Perimeter(geom) as perimeter,
 --                 -1 AS perimeter,
-                ST_Area((dump_result).geom) as area
+                ST_Area(geom) as area
             FROM (
-                SELECT ST_Dump(v_holes_geom) AS dump_result
-            ) AS dumps
+                SELECT st_reduceprecision((dump_result).geom, 0.01) as geom
+                FROM (
+                    SELECT ST_Dump(v_holes_geom) AS dump_result
+                ) AS dumps
+            ) as dumped_geoms
+            WHERE ST_GeometryType(geom) in ('ST_Polygon', 'ST_MultiPolygon')
         ) AS calculated;
 --         WHERE area >= 1000;
 
@@ -152,7 +156,9 @@ BEGIN
     ) ON COMMIT DROP;
 
     INSERT INTO temp_overflows
-    SELECT id, (ST_Dump(st_difference(geom, v_slo_meja))).geom
+--     SELECT id, (ST_Dump(st_difference(geom, v_slo_meja))).geom
+    SELECT id, st_reduceprecision((ST_Dump(st_difference(geom, v_slo_meja))).geom, 0.01)
+
 --     SELECT id, st_difference(geom, v_slo_meja)
     FROM md_geo_obm
     WHERE id_rel_geo_verzija = p_id_rel_geo_verzija
@@ -276,7 +282,7 @@ BEGIN
     SELECT
         a.id,
         b.id,
-        (ST_Dump(ST_Intersection(a.geom, b.geom))).geom as intersection_geom
+        st_reduceprecision((ST_Dump(ST_Intersection(a.geom, b.geom))).geom, 0.01) as intersection_geom
 --         ST_Intersection(a.geom, b.geom) as intersection_geom
     FROM md_geo_obm a
     JOIN md_geo_obm b ON a.id_rel_geo_verzija = b.id_rel_geo_verzija

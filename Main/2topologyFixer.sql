@@ -138,8 +138,7 @@ BEGIN
                     )
                 ) as shared_length
             FROM md_geo_obm obm
-            WHERE obm.area_type = hole_record.area_type
-                AND obm.id_rel_geo_verzija = hole_record.id_rel_geo_verzija
+            WHERE obm.id_rel_geo_verzija = hole_record.id_rel_geo_verzija
                 AND ST_Intersects(
                     ST_Boundary(hole_record.geom),
                     ST_Boundary(obm.geom)
