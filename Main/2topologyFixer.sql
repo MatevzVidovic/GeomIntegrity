@@ -216,5 +216,47 @@ BEGIN
         END IF;
     END LOOP;
 END $$;
+
+
+-- ============================================================================
+-- PART 3: FIX INTERSECTIONS
+-- ============================================================================
+-- For each intersection, subtract it from the geometry with id2 (keeping id1 intact)
+-- and delete the intersection from md_topoloske_kontrole
+
+CREATE OR REPLACE FUNCTION fix_intersections()
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    intersection_record RECORD;
+BEGIN
+    -- Loop through all intersections in md_topoloske_kontrole
+    FOR intersection_record IN
+        SELECT id, geom, area_type, id_rel_geo_verzija, id_rel_verzije_modela, id1, id2
+        FROM md_topoloske_kontrole
+        WHERE topology_problem_type = 'intersection'
+    LOOP
+        -- Subtract the intersection from the geometry with id2
+        -- We keep id1 intact and remove the overlap from id2
+        IF intersection_record.id1 IS NOT NULL AND intersection_record.id2 IS NOT NULL THEN
+            UPDATE md_geo_obm
+            SET geom = ST_Multi(
+                    ST_Difference(
+                        geom,
+                        (SELECT geom FROM md_topoloske_kontrole WHERE id = intersection_record.id)
+                    )
+                )
+            WHERE id = intersection_record.id2;
+
+            -- Delete the intersection from md_topoloske_kontrole
+            DELETE FROM md_topoloske_kontrole WHERE id = intersection_record.id;
+
+--             RAISE NOTICE 'Fixed intersection % by subtracting from geometry %', intersection_record.id, intersection_record.id2;
+        ELSE
+            RAISE WARNING 'Missing id1 or id2 for intersection %', intersection_record.id;
+        END IF;
+    END LOOP;
+END $$;
 --
 --

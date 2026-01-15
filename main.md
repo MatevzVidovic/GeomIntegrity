@@ -61,10 +61,37 @@ SELECT uuid_generate_v4() as id, st_reduceprecision(st_union(geom), 0.01) as geo
 FROM md_geo_obm;
 
 
-- Make new layer   topoloske_vrzeli
+- Make new layer   md_topoloske_kontrole
 And add fields: area_type text (obm, cona, lao, tao),  id_rel_geo_verzija, area, perimeter, compactness
 Names: Vrsta področja,  id_rel_geo_verzija, površina, obseg
 
+
+create table md_topoloske_kontrole
+(
+    id                    uuid      not null
+        primary key,
+    created_at            timestamp not null,
+    updated_at            timestamp,
+    created_by            uuid      not null,
+    updated_by            uuid,
+    gid                   serial,
+    geom                  geometry(MultiPolygon, 3794),
+    area_type             text      not null
+        constraint check_area_type
+            check (area_type = ANY (ARRAY ['obm'::text, 'cona'::text])),
+    id_rel_geo_verzija    uuid,
+    id_rel_verzije_modela uuid,
+    id2                   uuid,
+    id1                   uuid,
+    area                  numeric,
+    perimeter             numeric,
+    compactness           numeric,
+    topology_problem_type text
+        constraint check_topology_problem_type
+            check (topology_problem_type = ANY (ARRAY ['intersection'::text, 'hole'::text, 'overflow'::text])),
+    constraint check_id1_less_than_id2
+        check ((id2 IS NULL) OR ((id1 IS NOT NULL) AND (id1 < id2)))
+);
 
 
 - make full validation fn (so we fill topoloske_vrzeli with existing problems)

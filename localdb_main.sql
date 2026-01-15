@@ -55,14 +55,17 @@ FROM md_geo_obm;
 
 select * from validate_all_topologies();
 
-
-
-
 select * from fix_holes();
 select * from fix_overflows();
+select * from fix_intersections();
 
 select * from validate_all_topologies();
 
+select count(*) from md_topoloske_kontrole;
+
+select * from fix_holes();
+select * from fix_overflows();
+select * from fix_intersections();
 
 
 

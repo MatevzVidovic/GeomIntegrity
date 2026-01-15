@@ -76,7 +76,6 @@ BEGIN
             SELECT
                 geom,
                 ST_Perimeter(geom) as perimeter,
---                 -1 AS perimeter,
                 ST_Area(geom) as area
             FROM (
                 SELECT st_reduceprecision((dump_result).geom, 0.01) as geom
@@ -85,8 +84,8 @@ BEGIN
                 ) AS dumps
             ) as dumped_geoms
             WHERE ST_GeometryType(geom) in ('ST_Polygon', 'ST_MultiPolygon')
-        ) AS calculated;
---         WHERE area >= 1000;
+        ) AS calculated
+        WHERE area > 0;
 
     END IF;
     GET DIAGNOSTICS v_holes_count = ROW_COUNT;
@@ -205,19 +204,8 @@ BEGIN
         FROM temp_overflows
         WHERE -- NOT ST_Contains(v_slo_meja, overflow_geom) AND
          ST_GeometryType(overflow_geom) in ('ST_Polygon', 'ST_MultiPolygon')
-
---         SELECT
---             id,
---             (single_overflow).geom as geom,
---             ST_Perimeter((single_overflow).geom) as perimeter,
--- --                 -1 AS perimeter,
---             ST_Area((single_overflow).geom) as area
---         FROM (
---             SELECT id, ST_Dump(overflow_geom) as single_overflow
---             FROM temp_overflows
---         ) AS dumps
---         WHERE NOT ST_Contains(v_slo_meja, (single_overflow).geom) AND ST_GeometryType((single_overflow).geom) in ('ST_Polygon', 'ST_MultiPolygon')
-    ) AS calculated;
+        ) AS calculated
+    WHERE area > 0;
 
     GET DIAGNOSTICS v_overflows_count = ROW_COUNT;
 
@@ -315,21 +303,8 @@ BEGIN
             ST_Area(intersection_geom) as area
         FROM temp_intersections
         WHERE  ST_GeometryType(intersection_geom) in ('ST_Polygon', 'ST_MultiPolygon')
-
---         SELECT
---             id_a,
---             id_b,
---             (single_intersection).geom as geom,
---             ST_Perimeter((single_intersection).geom) as perimeter,
--- --                 -1 AS perimeter,
---             ST_Area((single_intersection).geom) as area
---         FROM (
---             SELECT id_a, id_b, ST_Dump(intersection_geom) as single_intersection
---             FROM temp_intersections
---         ) AS dumps
---         WHERE  ST_GeometryType((single_intersection).geom) in ('ST_Polygon', 'ST_MultiPolygon')
-
-    ) AS calculated;
+        ) AS calculated
+    WHERE area > 0;
 
     GET DIAGNOSTICS v_intersections_count = ROW_COUNT;
 
