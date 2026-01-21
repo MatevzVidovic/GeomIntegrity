@@ -19,17 +19,16 @@ BEGIN
 --         SELECT 1 as id, geom
 --         FROM slo_meja
         SELECT id, geom
-        FROM md_topoloske_kontrole
---         FROM md_geo_obm
+--         FROM md_topoloske_kontrole
+        FROM md_geo_obm
         ORDER BY random()
     LOOP
         IF
             'NULL' != (SELECT array_agg(m[1])::text
            FROM regexp_matches(st_astext(rec.geom), '\d+\.\d{3,}', 'g') AS m)
-
         THEN
-        RAISE NOTICE 'ID: %', rec.id;
-        RETURN FALSE;
+            RAISE NOTICE 'ID: %', rec.id;
+            RETURN FALSE;
         END IF;
     END LOOP;
     RETURN TRUE;

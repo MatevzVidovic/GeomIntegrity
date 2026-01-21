@@ -53,16 +53,26 @@ Then for all overflows, you see which entries intersect with them and mark them 
 ## Solution implementation:
 
 
-- Make slo_meja attribute table from SQL, and then make a layer from it:
+- Do conversion of geom polygons with st_reduceprecision.
+
+- Make new layer slo_meja insert into it from the console:
 
 
-CREATE MATERIALIZED VIEW slo_meja as
-SELECT uuid_generate_v4() as id, st_reduceprecision(st_union(geom), 0.01) as geom
+INSERT INTO slo_meja(id, created_at, created_by, geom)
+SELECT uuid_generate_v4() AS id,
+       now()::timestamp,
+       '848956e8-d73e-11f0-9ff0-02420a000f64',
+       ST_MakePolygon(ST_ExteriorRing(
+           ST_ReducePrecision(
+               ST_Union(md_geo_obm.geom), 
+               0.01
+           )
+       )) AS geom
 FROM md_geo_obm;
 
 
 - Make new layer   md_topoloske_kontrole
-And add fields: area_type text (obm, cona, lao, tao),  id_rel_geo_verzija, area, perimeter, compactness
+And add fields: area_type text (obm, cona, lao, tao),  id_rel_geo_verzija, area, perimeter, compactness,  topology_problem_type, id1, id2
 Names: Vrsta področja,  id_rel_geo_verzija, površina, obseg
 
 
@@ -80,7 +90,6 @@ create table md_topoloske_kontrole
         constraint check_area_type
             check (area_type = ANY (ARRAY ['obm'::text, 'cona'::text])),
     id_rel_geo_verzija    uuid,
-    id_rel_verzije_modela uuid,
     id2                   uuid,
     id1                   uuid,
     area                  numeric,
@@ -95,7 +104,29 @@ create table md_topoloske_kontrole
 
 
 
-- make full validation fn (so we fill topoloske_vrzeli with existing problems)
+
+CREATE INDEX idx_topoloske_kontrole ON md_topoloske_kontrole (area_type, id_rel_geo_verzija, id_rel_verzije_modela, topology_problem_type, id1, id2);
+
+ALTER TABLE md_topoloske_kontrole
+ADD CONSTRAINT check_area_type
+CHECK (area_type IN ('obm', 'cona'));
+
+ALTER TABLE md_topoloske_kontrole
+ADD CONSTRAINT check_topology_problem_type
+CHECK (topology_problem_type IN ('intersection', 'hole', 'overflow'));
+
+-- Allow NULL but enforce constraint when both are present
+ALTER TABLE md_topoloske_kontrole
+ADD CONSTRAINT check_id1_less_than_id2
+CHECK (id2 IS NULL OR (id1 IS NOT NULL AND id1 < id2));
+
+
+
+
+
+- make full validation fn (so we fill md_topoloske_kontrole with existing problems)
+
+
 - make trigger fn
 - set trigger
 

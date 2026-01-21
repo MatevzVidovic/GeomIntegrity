@@ -1,7 +1,7 @@
 --
 --
 --
--- in @2topologyFixer.sql we will fix topologies in table md_geo_obm based on the
+-- in @-2topologyFixer.sql we will fix topologies in table md_geo_obm based on the
 --   problems presented in md_topoloske_kontrole
 --
 --   For holes in md_topoloske_kontrole, we will find the geom in md_geo_obm that shares the largest border with them.

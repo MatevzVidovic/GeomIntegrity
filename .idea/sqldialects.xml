@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="SqlDialectMappings">
+    <file url="file://$PROJECT_DIR$/Main/-0simplify_polygons.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/Main/-2topologyFixer.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/Main/-4checkAllTopologiesWithSimplified.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/Main/00setup.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/Main/0simplify_polygons.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/Main/1make2decimalPlaces.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/Main/2topologyFixer.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/Main/3checkAllTopologies.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/Main/4checkAllTopologiesWithSimplified.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/Main/5trigger.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/files/topology_trigger.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/localdb_main.sql" dialect="PostgreSQL" />

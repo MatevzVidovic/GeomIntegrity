@@ -10,6 +10,7 @@ AS $$
 DECLARE
     v_slo_meja geometry;
     v_hole_geom geometry;
+    v_possible_new_geom geometry;
     v_insertion_geom geometry;
     v_insertion_hole_union_geom geometry;
     v_id_rel_geo_verzija UUID;
@@ -45,12 +46,6 @@ BEGIN
     IF (TG_OP = 'DELETE' OR TG_OP = 'UPDATE') THEN
         v_id_rel_geo_verzija := OLD.id_rel_geo_verzija;
 
-        -- Start with the removed geometry as potential hole
-        v_hole_geom := OLD.geom;
-
-        -- v_hole_geom is now a potential hole. ST_ReducePrecision.
-        v_hole_geom := st_reduceprecision(v_hole_geom, 0.01);
-
         -- OLD.geom might be part of some intersections. If so, remove them.
         DELETE FROM md_topoloske_kontrole
         WHERE topology_problem_type = 'intersection'
@@ -58,16 +53,24 @@ BEGIN
             and area_type = 'obm'
             and (OLD.id = id1 or OLD.id = id2);
 
+        -- Start with the removed geometry as potential hole
+        v_hole_geom := st_reduceprecision(OLD.geom, 0.01);
+
         -- Remove from it the union of all obm that intersect it.
         SELECT ST_Difference(
             v_hole_geom, (
                 SELECT ST_Union(geom)
                 FROM md_geo_obm
                 WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
-                    AND ST_Intersects(geom, v_hole_geom)
+                    AND ST_Intersects(geom, v_hole_geom) AND NOT ST_Touches(geom, v_hole_geom)
                     AND id != OLD.id
             )
-        ) INTO v_hole_geom;
+        ) INTO v_possible_new_geom;
+
+        -- is null when no intersections
+        if v_possible_new_geom is not null then
+            v_hole_geom := v_possible_new_geom;
+        end if;
 
         -- If it isn't ST_Covers(v_slo_meja, v_hole_geom), then remove the overflow from the hole.
         if not ST_Covers(v_slo_meja, v_hole_geom) then
@@ -86,8 +89,13 @@ BEGIN
         );
 
         SELECT ST_Union(ST_Union(geom), v_hole_geom)
-        INTO v_hole_geom
+        INTO v_possible_new_geom
         FROM intersecting_holes;
+
+        -- is null when intersecting_holes is empty
+        if v_possible_new_geom is not null then
+            v_hole_geom := v_possible_new_geom;
+        end if;
 
         -- Delete overlapping holes (we'll insert the merged one)
         DELETE FROM md_topoloske_kontrole
@@ -257,6 +265,42 @@ CREATE TRIGGER trg_validate_topology_incremental
     BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
     FOR EACH ROW
     EXECUTE FUNCTION validate_topology_incremental();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
