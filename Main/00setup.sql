@@ -116,6 +116,80 @@ END $$;
 
 
 -- ============================================================================
+-- STEP 8: Create hierarchy validation table
+-- ============================================================================
+-- This table stores ID-based validation problems for cona/lao/tao hierarchy
+
+CREATE TABLE IF NOT EXISTS md_topoloske_kontrole_hierarhija (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    created_at TIMESTAMP DEFAULT now(),
+    created_by UUID,
+    id_rel_geo_verzija UUID NOT NULL,
+    entity_type TEXT NOT NULL,  -- 'cona', 'lao', 'tao'
+    problem_type TEXT NOT NULL,
+    entity_id UUID,             -- The entity with the problem
+    reference_id UUID,          -- The missing/orphan reference
+    details TEXT                -- Additional context
+);
+
+CREATE INDEX IF NOT EXISTS idx_topoloske_kontrole_hierarhija
+ON md_topoloske_kontrole_hierarhija (
+    id_rel_geo_verzija,
+    entity_type,
+    problem_type
+);
+
+-- Constraint: entity_type must be valid
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'check_entity_type_hierarhija'
+    ) THEN
+        ALTER TABLE md_topoloske_kontrole_hierarhija
+        ADD CONSTRAINT check_entity_type_hierarhija
+        CHECK (entity_type IN ('cona', 'lao', 'tao'));
+    END IF;
+END $$;
+
+-- Constraint: problem_type must be valid
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'check_problem_type_hierarhija'
+    ) THEN
+        ALTER TABLE md_topoloske_kontrole_hierarhija
+        ADD CONSTRAINT check_problem_type_hierarhija
+        CHECK (problem_type IN (
+            'missing_obm_in_cona', 'orphan_obm_ref', 'orphan_cona_ref', 'empty_cona',
+            'missing_cona_in_lao', 'orphan_lao_ref_in_cona', 'empty_lao',
+            'missing_lao_in_tao', 'orphan_tao_ref_in_lao', 'empty_tao'
+        ));
+    END IF;
+END $$;
+
+
+-- ============================================================================
+-- STEP 9: Run initial hierarchy validation
+-- ============================================================================
+-- This populates md_topoloske_kontrole_hierarhija with all hierarchy issues.
+-- Uncomment to run:
+
+-- SELECT * FROM validate_all_hierarchies();
+
+
+-- ============================================================================
+-- STEP 10: Enable hierarchy triggers
+-- ============================================================================
+-- After initial validation, the triggers handle incremental updates.
+-- This is done by running 7triggerHierarchy.sql
+
+-- To enable the triggers, run:
+-- \i 7triggerHierarchy.sql
+
+
+-- ============================================================================
 -- Manual fixing functions (use with caution):
 -- ============================================================================
 -- SELECT * FROM fix_holes();
