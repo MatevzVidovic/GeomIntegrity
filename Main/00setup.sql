@@ -31,11 +31,11 @@
 -- \i /Users/matevzvidovic/GeomIntegrity/Main/98load_all_functions.sql
 
 -- \i /Users/matevzvidovic/GeomIntegrity/Main/99test_full_system.sql
-
-SELECT * FROM validate_all_topologies();
-
-SELECT * FROM validate_all_hierarchies();
-
+--
+-- SELECT * FROM validate_all_topologies();
+--
+-- SELECT * FROM validate_all_hierarchies();
+--
 
 
 -- ============================================================================
