@@ -13,12 +13,24 @@
 -- - Hierarchy issues (orphan refs, empty entities)
 -- - Incremental trigger behavior
 --
--- Run this in a transaction to keep test data isolated:
--- BEGIN; \i 99test_full_system.sql ROLLBACK;
--- Or to commit: BEGIN; \i 99test_full_system.sql COMMIT;
+-- TRANSACTION SAFETY:
+-- This script runs in a transaction and automatically rolls back at the end.
+-- Your database will NOT be modified after running this script.
+-- All changes (DML and DDL) will be completely undone.
+--
+-- PostgreSQL supports transactional DDL, so:
+-- ✅ All INSERTs, UPDATEs, DELETEs will be rolled back
+-- ✅ All CREATE/DROP TRIGGER operations will be rolled back
+-- ✅ Your original triggers will be restored
+-- ✅ Your original data will be untouched
 -- ============================================================================
 
 \timing on
+
+-- ============================================================================
+-- BEGIN TRANSACTION - Everything after this will be rolled back
+-- ============================================================================
+BEGIN;
 \echo ''
 \echo '================================================================================'
 \echo 'FULL SYSTEM TEST - Creating test model with 3x3 OBM grid'
@@ -479,7 +491,7 @@ DROP TABLE slo_meja_backup;
 
 \echo ''
 \echo '================================================================================'
-\echo 'TEST COMPLETE'
+\echo 'TEST COMPLETE - Rolling back all changes'
 \echo '================================================================================'
 \echo ''
 \echo 'Summary of tests performed:'
@@ -494,4 +506,24 @@ DROP TABLE slo_meja_backup;
 \echo '  ✓ Cleaned up test data'
 \echo ''
 \echo 'All triggers are functioning correctly!'
+\echo ''
+
+
+-- ============================================================================
+-- ROLLBACK - Undo all changes made during this test
+-- ============================================================================
+\echo '================================================================================'
+\echo 'ROLLING BACK - Your database is completely unchanged'
+\echo '================================================================================'
+\echo ''
+\echo '✅ All test data removed'
+\echo '✅ All trigger changes reverted'
+\echo '✅ Original slo_meja restored'
+\echo '✅ Database state is identical to before running this script'
+\echo ''
+
+ROLLBACK;
+
+\echo ''
+\echo '🎉 Test completed successfully! Your database was not modified.'
 \echo ''

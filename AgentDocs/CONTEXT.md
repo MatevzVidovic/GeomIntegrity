@@ -100,21 +100,29 @@ Stores **ID-based** hierarchy problems for cona/lao/tao:
 
 ```
 Main/
-├── 00setup.sql                     - Setup commands (use 00setup_new.sql)
-├── 00setup_new.sql                 - Clean setup script
-├── -0simplify_polygons.sql         - Polygon simplification utilities
+├── 00setup.sql                     - Initial setup (tables, indexes, constraints)
 ├── 1make2decimalPlaces.sql         - Precision functions
-├── -2topologyFixer.sql             - Fix topology problems
 ├── 3checkAllTopologies.sql         - OBM full validation functions
-├── -4checkAllTopologiesWithSimplified.sql - Validation for simplified geoms
 ├── 5trigger.sql                    - OBM incremental trigger
 ├── 6validateHierarchy.sql          - Cona/Lao/Tao full validation functions
-└── 7triggerHierarchy.sql           - Cona/Lao/Tao incremental triggers
+├── 7triggerHierarchy.sql           - Cona/Lao/Tao incremental triggers
+├── 98load_all_functions.sql        - Load all functions (1,3,5,6,7) in correct order
+├── 99test_full_system.sql          - Comprehensive test suite (auto-rollback)
+├── -0simplify_polygons.sql         - OLD: Polygon simplification (deprecated)
+├── -2topologyFixer.sql             - OLD: Fix topology problems (deprecated)
+└── -4checkAllTopologiesWithSimplified.sql - OLD: Validation (deprecated)
 
 ignore_me/                          - Old/unused files
 
+Note: Files with '-' prefix are deprecated and not loaded by 98load_all_functions.sql
+
 AgentDocs/
-└── CONTEXT.md                      - This file
+├── CONTEXT.md                      - This file
+├── FINAL_SCHEMA.md                 - Final table schemas (Slovene names)
+├── CHANGES_FINAL.md                - Summary of changes made
+├── 98_LOADER_INFO.md               - Documentation for 98load_all_functions.sql
+├── ROLLBACK_INTEGRATION.md         - Rollback safety documentation
+└── POSTGRESQL_ROLLBACK.md          - PostgreSQL transaction capabilities
 ```
 
 ## OBM Topology Validation (Geometric)
@@ -166,23 +174,76 @@ AgentDocs/
 
 ## Setup Instructions
 
-1. **Create required tables** (if not exist):
-   - `md_topoloske_kontrole_obm` - for OBM topology issues
-   - `md_topoloske_kontrole_hierarhija` - for hierarchy issues (see 6validateHierarchy.sql for schema)
+### First Time Setup
 
-2. **Run setup script**: `\i Main/00setup_new.sql`
+1. **Run setup script**: `\i Main/00setup.sql`
+   - Creates tables (if not exists)
+   - Creates indexes
+   - Adds constraints
+   - Initializes slo_meja boundary
 
-3. **Load validation functions**:
-   - `\i Main/3checkAllTopologies.sql`
-   - `\i Main/6validateHierarchy.sql`
+2. **Load all functions and triggers**: `\i Main/98load_all_functions.sql`
+   - Loads all validation functions (scripts 1-7)
+   - Creates all triggers
+   - Done in correct dependency order
 
-4. **Run initial validation**:
-   - `SELECT * FROM validate_all_topologies();` (OBM)
-   - `SELECT * FROM validate_all_hierarchies();` (Cona/Lao/Tao)
+3. **Run initial validation**:
+   ```sql
+   SELECT * FROM validate_all_topologies();    -- OBM topology
+   SELECT * FROM validate_all_hierarchies();   -- Hierarchy relationships
+   ```
 
-5. **Enable triggers**:
-   - `\i Main/5trigger.sql` (OBM trigger)
-   - `\i Main/7triggerHierarchy.sql` (Hierarchy triggers)
+4. **Test the system**: `\i Main/99test_full_system.sql`
+   - Comprehensive test suite
+   - Automatically rolls back (safe to run)
+
+### Updating Functions After Changes
+
+When you modify any SQL file (1-7):
+```sql
+\i Main/98load_all_functions.sql
+```
+
+This reloads all function definitions without affecting data or tables.
+
+## Testing
+
+### 99test_full_system.sql
+**Purpose**: Comprehensive test suite that validates all system functionality
+
+**SAFETY**: This script automatically wraps everything in a transaction and rolls back at the end. Your database will **NOT** be modified. PostgreSQL supports transactional DDL, so even trigger changes are rolled back.
+
+**Test Model**:
+- Creates 9 OBMs in 3x3 grid (1km each)
+- Creates 3 Conas (one per row)
+- Creates 2 LAOs
+- Creates 1 TAO
+
+**Tests Performed**:
+1. Initial validation (perfect topology + hierarchy)
+2. Intersection detection (expand OBM2 to overlap OBM5)
+3. Hole detection (delete OBM5)
+4. Orphan OBM detection (remove OBM3 from obmxcona)
+5. Empty Cona detection (remove all OBMs from Cona3)
+6. Orphan LAO reference (delete LAO2)
+
+**Usage**: Just run it - rollback is automatic:
+```sql
+\i Main/99test_full_system.sql
+```
+
+**What gets rolled back**:
+- ✅ All test data (INSERTs, UPDATEs, DELETEs)
+- ✅ All trigger changes (CREATE/DROP TRIGGER)
+- ✅ Temporary tables
+- ✅ slo_meja modifications
+
+**PostgreSQL Transaction Safety**:
+PostgreSQL supports **transactional DDL**, which means:
+- ✅ DML operations (INSERT, UPDATE, DELETE) - fully rollback-able
+- ✅ DDL operations (CREATE TABLE, ALTER TABLE, DROP TABLE, CREATE/DROP TRIGGER) - also rollback-able!
+- ✅ TRUNCATE - rollback-able in PostgreSQL
+- ❌ Only non-transactional: DROP/CREATE DATABASE operations
 
 ## Manual Actions Needed
 

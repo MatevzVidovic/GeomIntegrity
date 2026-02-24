@@ -158,13 +158,12 @@ BEGIN
             created_at,
             created_by,
             geom,
-            area_type,
             id_rel_geo_verzija,
             id1,
             id2,
-            area,
-            perimeter,
-           kompaktnost,
+            povrsina,
+            obseg,
+            kompaktnost,
             tip_topoloskega_problema
         )
         SELECT
@@ -172,13 +171,12 @@ BEGIN
             now()::timestamp,
             '848956e8-d73e-11f0-9ff0-02420a000f64',
             geom,
-            'obm',
             v_id_rel_geo_verzija,
             LEAST(NEW.id, other_id),
             GREATEST(NEW.ID, other_id),
             povrsina,
             obseg,
-        4*pi()*povrsina / NULLIF(obseg * obseg, 0),   -- (circle has it 0.08 (1/4*pi) and is most compact. Everything else is less compact.)
+            4*pi()*povrsina / NULLIF(obseg * obseg, 0),   -- (circle has it 0.08 (1/4*pi) and is most compact. Everything else is less compact.)
             'prekrivanje'
         FROM (
             SELECT
@@ -203,7 +201,6 @@ BEGIN
           SELECT id
           FROM md_topoloske_kontrole_obm
           WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
-            AND area_type = 'obm'
             AND tip_topoloskega_problema = 'luknja'
             AND ST_Intersects(v_insertion_geom, geom)
         );
@@ -221,10 +218,9 @@ BEGIN
             created_at,
             created_by,
             geom,
-            area_type,
             id_rel_geo_verzija,
-            area,
-            perimeter,
+            povrsina,
+            obseg,
             tip_topoloskega_problema
         )
         SELECT
@@ -232,10 +228,9 @@ BEGIN
             now()::timestamp,
             '848956e8-d73e-11f0-9ff0-02420a000f64',
             hole_geom,
-            'obm',
             v_id_rel_geo_verzija,
             ST_Area(hole_geom),
-       st_perimeter(hole_geom),
+            ST_Perimeter(hole_geom),
             'luknja'
         FROM (SELECT st_reduceprecision((ST_Dump(v_insertion_hole_union_geom)).geom, 0.01) AS hole_geom) AS dump
         WHERE ST_Area(hole_geom) > 0;
