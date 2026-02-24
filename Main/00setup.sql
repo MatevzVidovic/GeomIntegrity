@@ -26,15 +26,16 @@
 --     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 --     created_at TIMESTAMP DEFAULT now(),
 --     created_by UUID,
+--     updated_at TIMESTAMP,
+--     updated_by UUID,
 --     id_rel_geo_verzija UUID NOT NULL,
---     id_rel_verzije_modela UUID,
---     topology_problem_type TEXT NOT NULL,
+--     tip_topoloskega_problema TEXT NOT NULL,  -- 'prekrivanje', 'luknja', 'preliv'
 --     id1 UUID,                -- First OBM id (for intersections)
 --     id2 UUID,                -- Second OBM id (for intersections)
 --     geom GEOMETRY(Geometry, 3794),
---     area DOUBLE PRECISION,
---     perimeter DOUBLE PRECISION,
---     compactness DOUBLE PRECISION
+--     povrsina DOUBLE PRECISION,
+--     obseg DOUBLE PRECISION,
+--     kompaktnost DOUBLE PRECISION
 -- );
 
 -- Note: Geometry columns typically get automatic spatial indexes in PostGIS.
@@ -93,7 +94,7 @@ FROM md_geo_obm;
 CREATE INDEX IF NOT EXISTS idx_topoloske_kontrole_obm_query
 ON md_topoloske_kontrole_obm (
     id_rel_geo_verzija,
-    topology_problem_type,
+    tip_topoloskega_problema,
     id1,
     id2
 );
@@ -108,16 +109,16 @@ ON md_topoloske_kontrole_obm (
 -- STEP 6: Add constraints to OBM topology controls table
 -- ============================================================================
 
--- Constraint: topology_problem_type must be valid for OBM
+-- Constraint: tip_topoloskega_problema must be valid for OBM
 DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
-        WHERE conname = 'check_topology_problem_type_obm'
+        WHERE conname = 'check_tip_topoloskega_problema_obm'
     ) THEN
         ALTER TABLE md_topoloske_kontrole_obm
-        ADD CONSTRAINT check_topology_problem_type_obm
-        CHECK (topology_problem_type IN ('intersection', 'hole', 'overflow'));
+        ADD CONSTRAINT check_tip_topoloskega_problema_obm
+        CHECK (tip_topoloskega_problema IN ('prekrivanje', 'luknja', 'preliv'));
     END IF;
 END $$;
 
@@ -168,45 +169,46 @@ END $$;
 --     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 --     created_at TIMESTAMP DEFAULT now(),
 --     created_by UUID,
+--     updated_at TIMESTAMP,
+--     updated_by UUID,
 --     id_rel_geo_verzija UUID NOT NULL,
---     entity_type TEXT NOT NULL,  -- 'cona', 'lao', 'tao'
---     problem_type TEXT NOT NULL,
---     entity_id UUID,             -- The entity with the problem
---     reference_id UUID,          -- The missing/orphan reference
---     details TEXT                -- Additional context
+--     tip_entitete TEXT NOT NULL,  -- 'cona', 'lao', 'tao'
+--     tip_problema TEXT NOT NULL,  -- Describes problem and implicitly what problematicen_id refers to
+--     problematicen_id UUID        -- The relevant ID (entity or reference, depending on tip_problema)
 -- );
 
 -- Query optimization index
 CREATE INDEX IF NOT EXISTS idx_topoloske_kontrole_hierarhija_query
 ON md_topoloske_kontrole_hierarhija (
     id_rel_geo_verzija,
-    entity_type,
-    problem_type
+    tip_entitete,
+    tip_problema,
+    problematicen_id
 );
 
--- Constraint: entity_type must be valid
+-- Constraint: tip_entitete must be valid
 DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
-        WHERE conname = 'check_entity_type_hierarhija'
+        WHERE conname = 'check_tip_entitete_hierarhija'
     ) THEN
         ALTER TABLE md_topoloske_kontrole_hierarhija
-        ADD CONSTRAINT check_entity_type_hierarhija
-        CHECK (entity_type IN ('cona', 'lao', 'tao'));
+        ADD CONSTRAINT check_tip_entitete_hierarhija
+        CHECK (tip_entitete IN ('cona', 'lao', 'tao'));
     END IF;
 END $$;
 
--- Constraint: problem_type must be valid
+-- Constraint: tip_problema must be valid
 DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
-        WHERE conname = 'check_problem_type_hierarhija'
+        WHERE conname = 'check_tip_problema_hierarhija'
     ) THEN
         ALTER TABLE md_topoloske_kontrole_hierarhija
-        ADD CONSTRAINT check_problem_type_hierarhija
-        CHECK (problem_type IN (
+        ADD CONSTRAINT check_tip_problema_hierarhija
+        CHECK (tip_problema IN (
             'missing_obm_in_cona', 'orphan_obm_ref', 'orphan_cona_ref', 'empty_cona',
             'missing_cona_in_lao', 'orphan_lao_ref_in_cona', 'empty_lao',
             'missing_lao_in_tao', 'orphan_tao_ref_in_lao', 'empty_tao'

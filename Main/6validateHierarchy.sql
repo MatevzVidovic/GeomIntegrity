@@ -32,8 +32,8 @@
 --     created_at TIMESTAMP DEFAULT now(),
 --     created_by UUID,
 --     id_rel_geo_verzija UUID NOT NULL,
---     entity_type TEXT NOT NULL,  -- 'cona', 'lao', 'tao'
---     problem_type TEXT NOT NULL,
+--     tip_entitete TEXT NOT NULL,  -- 'cona', 'lao', 'tao'
+--     tip_problema TEXT NOT NULL,
 --     entity_id UUID,             -- The entity with the problem
 --     reference_id UUID,          -- The missing/orphan reference
 --     details TEXT                -- Additional context
@@ -42,8 +42,8 @@
 -- CREATE INDEX IF NOT EXISTS idx_topoloske_kontrole_hierarhija
 -- ON md_topoloske_kontrole_hierarhija (
 --     id_rel_geo_verzija,
---     entity_type,
---     problem_type
+--     tip_entitete,
+--     tip_problema
 -- );
 
 
@@ -75,12 +75,12 @@ BEGIN
     -- Clear existing cona problems for this version
     DELETE FROM md_topoloske_kontrole_hierarhija
     WHERE id_rel_geo_verzija = p_id_rel_geo_verzija
-      AND entity_type = 'cona';
+      AND tip_entitete = 'cona';
 
     -- 1. Find OBMs not assigned to any cona
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_geo_verzija,
-        entity_type, problem_type, entity_id, details
+        tip_entitete, tip_problema, problematicen_id
     )
     SELECT
         uuid_generate_v4(),
@@ -89,8 +89,7 @@ BEGIN
         p_id_rel_geo_verzija,
         'cona',
         'missing_obm_in_cona',
-        obm.id,
-        'OBM "' || COALESCE(obm.ime_obmocja, obm.id::text) || '" is not assigned to any cona'
+        obm.id
     FROM md_geo_obm obm
     WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
       AND NOT EXISTS (
@@ -102,7 +101,7 @@ BEGIN
     -- 2. Find obmxcona entries referencing non-existent OBMs
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_geo_verzija,
-        entity_type, problem_type, reference_id, details
+        tip_entitete, tip_problema, reference_id, details
     )
     SELECT
         uuid_generate_v4(),
@@ -111,8 +110,7 @@ BEGIN
         p_id_rel_geo_verzija,
         'cona',
         'orphan_obm_ref',
-        xc.id_rel_geo_obm,
-        'obmxcona references non-existent OBM: ' || xc.id_rel_geo_obm::text
+        xc.id_rel_geo_obm
     FROM md_geo_obmxcona xc
     JOIN md_geo_cona c ON xc.id_rel_geo_cona = c.id
     WHERE c.id_rel_geo_verzija = p_id_rel_geo_verzija
@@ -126,7 +124,7 @@ BEGIN
     -- 3. Find obmxcona entries referencing non-existent conas
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_geo_verzija,
-        entity_type, problem_type, reference_id, details
+        tip_entitete, tip_problema, reference_id, details
     )
     SELECT
         uuid_generate_v4(),
@@ -135,8 +133,7 @@ BEGIN
         p_id_rel_geo_verzija,
         'cona',
         'orphan_cona_ref',
-        xc.id_rel_geo_cona,
-        'obmxcona references non-existent cona: ' || xc.id_rel_geo_cona::text
+        xc.id_rel_geo_cona
     FROM md_geo_obmxcona xc
     JOIN md_geo_obm obm ON xc.id_rel_geo_obm = obm.id
     WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
@@ -150,7 +147,7 @@ BEGIN
     -- 4. Find conas with no OBMs
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_geo_verzija,
-        entity_type, problem_type, entity_id, details
+        tip_entitete, tip_problema, problematicen_id
     )
     SELECT
         uuid_generate_v4(),
@@ -159,8 +156,7 @@ BEGIN
         p_id_rel_geo_verzija,
         'cona',
         'empty_cona',
-        c.id,
-        'Cona "' || COALESCE(c.ime_cone, c.id::text) || '" has no OBMs assigned'
+        c.id
     FROM md_geo_cona c
     WHERE c.id_rel_geo_verzija = p_id_rel_geo_verzija
       AND NOT EXISTS (
@@ -200,12 +196,12 @@ BEGIN
     -- Clear existing lao problems for this version
     DELETE FROM md_topoloske_kontrole_hierarhija
     WHERE id_rel_geo_verzija = p_id_rel_geo_verzija
-      AND entity_type = 'lao';
+      AND tip_entitete = 'lao';
 
     -- 1. Find conas not assigned to any lao (id_rel_geo_lao IS NULL)
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_geo_verzija,
-        entity_type, problem_type, entity_id, details
+        tip_entitete, tip_problema, problematicen_id
     )
     SELECT
         uuid_generate_v4(),
@@ -214,8 +210,7 @@ BEGIN
         p_id_rel_geo_verzija,
         'lao',
         'missing_cona_in_lao',
-        c.id,
-        'Cona "' || COALESCE(c.ime_cone, c.id::text) || '" is not assigned to any LAO'
+        c.id
     FROM md_geo_cona c
     WHERE c.id_rel_geo_verzija = p_id_rel_geo_verzija
       AND c.id_rel_geo_lao IS NULL;
@@ -224,7 +219,7 @@ BEGIN
     -- 2. Find conas referencing non-existent laos
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_geo_verzija,
-        entity_type, problem_type, entity_id, reference_id, details
+        tip_entitete, tip_problema, problematicen_id
     )
     SELECT
         uuid_generate_v4(),
@@ -233,9 +228,7 @@ BEGIN
         p_id_rel_geo_verzija,
         'lao',
         'orphan_lao_ref_in_cona',
-        c.id,
-        c.id_rel_geo_lao,
-        'Cona "' || COALESCE(c.ime_cone, c.id::text) || '" references non-existent LAO: ' || c.id_rel_geo_lao::text
+        c.id_rel_geo_lao
     FROM md_geo_cona c
     WHERE c.id_rel_geo_verzija = p_id_rel_geo_verzija
       AND c.id_rel_geo_lao IS NOT NULL
@@ -248,7 +241,7 @@ BEGIN
     -- 3. Find laos with no conas
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_geo_verzija,
-        entity_type, problem_type, entity_id, details
+        tip_entitete, tip_problema, problematicen_id
     )
     SELECT
         uuid_generate_v4(),
@@ -257,8 +250,7 @@ BEGIN
         p_id_rel_geo_verzija,
         'lao',
         'empty_lao',
-        l.id,
-        'LAO "' || COALESCE(l.ime_lao, l.id::text) || '" has no conas assigned'
+        l.id
     FROM md_geo_lao l
     WHERE l.id_rel_verzije_modeli = (
         SELECT DISTINCT c.id_rel_verzije_modeli
@@ -317,12 +309,12 @@ BEGIN
     -- Clear existing tao problems for this version
     DELETE FROM md_topoloske_kontrole_hierarhija
     WHERE id_rel_geo_verzija = p_id_rel_geo_verzija
-      AND entity_type = 'tao';
+      AND tip_entitete = 'tao';
 
     -- 1. Find laos not assigned to any tao (id_rel_geo_tao IS NULL)
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_geo_verzija,
-        entity_type, problem_type, entity_id, details
+        tip_entitete, tip_problema, problematicen_id
     )
     SELECT
         uuid_generate_v4(),
@@ -331,8 +323,7 @@ BEGIN
         p_id_rel_geo_verzija,
         'tao',
         'missing_lao_in_tao',
-        l.id,
-        'LAO "' || COALESCE(l.ime_lao, l.id::text) || '" is not assigned to any TAO'
+        l.id
     FROM md_geo_lao l
     WHERE l.id_rel_verzije_modeli = v_id_rel_verzije_modeli
       AND l.id_rel_geo_tao IS NULL;
@@ -341,7 +332,7 @@ BEGIN
     -- 2. Find laos referencing non-existent taos
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_geo_verzija,
-        entity_type, problem_type, entity_id, reference_id, details
+        tip_entitete, tip_problema, problematicen_id
     )
     SELECT
         uuid_generate_v4(),
@@ -350,9 +341,7 @@ BEGIN
         p_id_rel_geo_verzija,
         'tao',
         'orphan_tao_ref_in_lao',
-        l.id,
-        l.id_rel_geo_tao,
-        'LAO "' || COALESCE(l.ime_lao, l.id::text) || '" references non-existent TAO: ' || l.id_rel_geo_tao::text
+        l.id_rel_geo_tao
     FROM md_geo_lao l
     WHERE l.id_rel_verzije_modeli = v_id_rel_verzije_modeli
       AND l.id_rel_geo_tao IS NOT NULL
@@ -365,7 +354,7 @@ BEGIN
     -- 3. Find taos with no laos
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_geo_verzija,
-        entity_type, problem_type, entity_id, details
+        tip_entitete, tip_problema, problematicen_id
     )
     SELECT
         uuid_generate_v4(),
@@ -374,8 +363,7 @@ BEGIN
         p_id_rel_geo_verzija,
         'tao',
         'empty_tao',
-        t.id,
-        'TAO id_tao=' || t.id_tao::text || ' has no LAOs assigned'
+        t.id
     FROM md_geo_tao t
     WHERE t.id_rel_verzije_modeli = v_id_rel_verzije_modeli
       AND NOT EXISTS (

@@ -41,10 +41,10 @@ BEGIN
             -- Remove any existing problems related to this link
             DELETE FROM md_topoloske_kontrole_hierarhija
             WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
-              AND entity_type = 'cona'
+              AND tip_entitete = 'cona'
               AND (
-                  (problem_type = 'orphan_obm_ref' AND reference_id = OLD.id_rel_geo_obm)
-                  OR (problem_type = 'orphan_cona_ref' AND reference_id = OLD.id_rel_geo_cona)
+                  (tip_problema = 'orphan_obm_ref' AND problematicen_id = OLD.id_rel_geo_obm)
+                  OR (tip_problema = 'orphan_cona_ref' AND problematicen_id = OLD.id_rel_geo_cona)
               );
 
             -- Check if the OBM is now orphaned (not in any cona)
@@ -61,7 +61,7 @@ BEGIN
                 ) THEN
                     INSERT INTO md_topoloske_kontrole_hierarhija (
                         id, created_at, created_by, id_rel_geo_verzija,
-                        entity_type, problem_type, entity_id, details
+                        tip_entitete, tip_problema, problematicen_id
                     )
                     SELECT
                         uuid_generate_v4(),
@@ -70,8 +70,7 @@ BEGIN
                         v_id_rel_geo_verzija,
                         'cona',
                         'missing_obm_in_cona',
-                        obm.id,
-                        'OBM "' || COALESCE(obm.ime_obmocja, obm.id::text) || '" is not assigned to any cona'
+                        obm.id
                     FROM md_geo_obm obm
                     WHERE obm.id = OLD.id_rel_geo_obm;
                 END IF;
@@ -85,7 +84,7 @@ BEGIN
             ) THEN
                 INSERT INTO md_topoloske_kontrole_hierarhija (
                     id, created_at, created_by, id_rel_geo_verzija,
-                    entity_type, problem_type, entity_id, details
+                    tip_entitete, tip_problema, problematicen_id
                 )
                 SELECT
                     uuid_generate_v4(),
@@ -94,14 +93,13 @@ BEGIN
                     v_id_rel_geo_verzija,
                     'cona',
                     'empty_cona',
-                    c.id,
-                    'Cona "' || COALESCE(c.ime_cone, c.id::text) || '" has no OBMs assigned'
+                    c.id
                 FROM md_geo_cona c
                 WHERE c.id = OLD.id_rel_geo_cona
                   AND NOT EXISTS (
                       SELECT 1 FROM md_topoloske_kontrole_hierarhija
-                      WHERE entity_id = c.id
-                        AND problem_type = 'empty_cona'
+                      WHERE problematicen_id = c.id
+                        AND tip_problema = 'empty_cona'
                   );
             END IF;
         END IF;
@@ -132,7 +130,7 @@ BEGIN
             -- Record orphan OBM reference
             INSERT INTO md_topoloske_kontrole_hierarhija (
                 id, created_at, created_by, id_rel_geo_verzija,
-                entity_type, problem_type, reference_id, details
+                tip_entitete, tip_problema, problematicen_id
             )
             VALUES (
                 uuid_generate_v4(),
@@ -141,15 +139,14 @@ BEGIN
                 v_id_rel_geo_verzija,
                 'cona',
                 'orphan_obm_ref',
-                NEW.id_rel_geo_obm,
-                'obmxcona references non-existent OBM: ' || NEW.id_rel_geo_obm::text
+                NEW.id_rel_geo_obm
             );
         ELSE
             -- Remove any "missing_obm_in_cona" problem for this OBM
             DELETE FROM md_topoloske_kontrole_hierarhija
-            WHERE entity_type = 'cona'
-              AND problem_type = 'missing_obm_in_cona'
-              AND entity_id = NEW.id_rel_geo_obm;
+            WHERE tip_entitete = 'cona'
+              AND tip_problema = 'missing_obm_in_cona'
+              AND problematicen_id = NEW.id_rel_geo_obm;
         END IF;
 
         IF NOT v_cona_exists THEN
@@ -163,7 +160,7 @@ BEGIN
             -- Record orphan cona reference
             INSERT INTO md_topoloske_kontrole_hierarhija (
                 id, created_at, created_by, id_rel_geo_verzija,
-                entity_type, problem_type, reference_id, details
+                tip_entitete, tip_problema, problematicen_id
             )
             VALUES (
                 uuid_generate_v4(),
@@ -172,15 +169,14 @@ BEGIN
                 v_id_rel_geo_verzija,
                 'cona',
                 'orphan_cona_ref',
-                NEW.id_rel_geo_cona,
-                'obmxcona references non-existent cona: ' || NEW.id_rel_geo_cona::text
+                NEW.id_rel_geo_cona
             );
         ELSE
             -- Remove any "empty_cona" problem for this cona
             DELETE FROM md_topoloske_kontrole_hierarhija
-            WHERE entity_type = 'cona'
-              AND problem_type = 'empty_cona'
-              AND entity_id = NEW.id_rel_geo_cona;
+            WHERE tip_entitete = 'cona'
+              AND tip_problema = 'empty_cona'
+              AND problematicen_id = NEW.id_rel_geo_cona;
         END IF;
     END IF;
 
@@ -227,8 +223,8 @@ BEGIN
         -- Remove old problems for this cona
         DELETE FROM md_topoloske_kontrole_hierarhija
         WHERE id_rel_geo_verzija = OLD.id_rel_geo_verzija
-          AND entity_type = 'lao'
-          AND entity_id = OLD.id;
+          AND tip_entitete = 'lao'
+          AND problematicen_id = OLD.id;
 
         -- Check if the old LAO is now empty
         IF OLD.id_rel_geo_lao IS NOT NULL THEN
@@ -240,7 +236,7 @@ BEGIN
             ) THEN
                 INSERT INTO md_topoloske_kontrole_hierarhija (
                     id, created_at, created_by, id_rel_geo_verzija,
-                    entity_type, problem_type, entity_id, details
+                    tip_entitete, tip_problema, problematicen_id
                 )
                 SELECT
                     uuid_generate_v4(),
@@ -249,14 +245,13 @@ BEGIN
                     OLD.id_rel_geo_verzija,
                     'lao',
                     'empty_lao',
-                    l.id,
-                    'LAO "' || COALESCE(l.ime_lao, l.id::text) || '" has no conas assigned'
+                    l.id
                 FROM md_geo_lao l
                 WHERE l.id = OLD.id_rel_geo_lao
                   AND NOT EXISTS (
                       SELECT 1 FROM md_topoloske_kontrole_hierarhija
-                      WHERE entity_id = l.id
-                        AND problem_type = 'empty_lao'
+                      WHERE problematicen_id = l.id
+                        AND tip_problema = 'empty_lao'
                   );
             END IF;
         END IF;
@@ -270,7 +265,7 @@ BEGIN
             -- Cona not assigned to any LAO
             INSERT INTO md_topoloske_kontrole_hierarhija (
                 id, created_at, created_by, id_rel_geo_verzija,
-                entity_type, problem_type, entity_id, details
+                tip_entitete, tip_problema, problematicen_id
             )
             VALUES (
                 uuid_generate_v4(),
@@ -279,8 +274,7 @@ BEGIN
                 NEW.id_rel_geo_verzija,
                 'lao',
                 'missing_cona_in_lao',
-                NEW.id,
-                'Cona "' || COALESCE(NEW.ime_cone, NEW.id::text) || '" is not assigned to any LAO'
+                NEW.id
             );
         ELSE
             -- Check if LAO exists
@@ -293,7 +287,7 @@ BEGIN
                 -- Record orphan LAO reference
                 INSERT INTO md_topoloske_kontrole_hierarhija (
                     id, created_at, created_by, id_rel_geo_verzija,
-                    entity_type, problem_type, entity_id, reference_id, details
+                    tip_entitete, tip_problema, problematicen_id, problematicen_id, details
                 )
                 VALUES (
                     uuid_generate_v4(),
@@ -302,16 +296,14 @@ BEGIN
                     NEW.id_rel_geo_verzija,
                     'lao',
                     'orphan_lao_ref_in_cona',
-                    NEW.id,
-                    NEW.id_rel_geo_lao,
-                    'Cona "' || COALESCE(NEW.ime_cone, NEW.id::text) || '" references non-existent LAO: ' || NEW.id_rel_geo_lao::text
+                    NEW.id_rel_geo_lao
                 );
             ELSE
                 -- Remove any "empty_lao" problem for this LAO
                 DELETE FROM md_topoloske_kontrole_hierarhija
-                WHERE entity_type = 'lao'
-                  AND problem_type = 'empty_lao'
-                  AND entity_id = NEW.id_rel_geo_lao;
+                WHERE tip_entitete = 'lao'
+                  AND tip_problema = 'empty_lao'
+                  AND problematicen_id = NEW.id_rel_geo_lao;
             END IF;
         END IF;
     END IF;
@@ -365,8 +357,8 @@ BEGIN
     IF (TG_OP = 'DELETE' OR (TG_OP = 'UPDATE' AND OLD.id_rel_geo_tao IS DISTINCT FROM NEW.id_rel_geo_tao)) THEN
         -- Remove old problems for this LAO
         DELETE FROM md_topoloske_kontrole_hierarhija
-        WHERE entity_type = 'tao'
-          AND entity_id = OLD.id;
+        WHERE tip_entitete = 'tao'
+          AND problematicen_id = OLD.id;
 
         -- Check if the old TAO is now empty
         IF OLD.id_rel_geo_tao IS NOT NULL THEN
@@ -378,7 +370,7 @@ BEGIN
             ) THEN
                 INSERT INTO md_topoloske_kontrole_hierarhija (
                     id, created_at, created_by, id_rel_geo_verzija,
-                    entity_type, problem_type, entity_id, details
+                    tip_entitete, tip_problema, problematicen_id
                 )
                 SELECT
                     uuid_generate_v4(),
@@ -387,14 +379,13 @@ BEGIN
                     v_id_rel_geo_verzija,
                     'tao',
                     'empty_tao',
-                    t.id,
-                    'TAO id_tao=' || t.id_tao::text || ' has no LAOs assigned'
+                    t.id
                 FROM md_geo_tao t
                 WHERE t.id = OLD.id_rel_geo_tao
                   AND NOT EXISTS (
                       SELECT 1 FROM md_topoloske_kontrole_hierarhija
-                      WHERE entity_id = t.id
-                        AND problem_type = 'empty_tao'
+                      WHERE problematicen_id = t.id
+                        AND tip_problema = 'empty_tao'
                   );
             END IF;
         END IF;
@@ -408,7 +399,7 @@ BEGIN
             -- LAO not assigned to any TAO
             INSERT INTO md_topoloske_kontrole_hierarhija (
                 id, created_at, created_by, id_rel_geo_verzija,
-                entity_type, problem_type, entity_id, details
+                tip_entitete, tip_problema, problematicen_id
             )
             VALUES (
                 uuid_generate_v4(),
@@ -417,8 +408,7 @@ BEGIN
                 v_id_rel_geo_verzija,
                 'tao',
                 'missing_lao_in_tao',
-                NEW.id,
-                'LAO "' || COALESCE(NEW.ime_lao, NEW.id::text) || '" is not assigned to any TAO'
+                NEW.id
             );
         ELSE
             -- Check if TAO exists
@@ -431,7 +421,7 @@ BEGIN
                 -- Record orphan TAO reference
                 INSERT INTO md_topoloske_kontrole_hierarhija (
                     id, created_at, created_by, id_rel_geo_verzija,
-                    entity_type, problem_type, entity_id, reference_id, details
+                    tip_entitete, tip_problema, problematicen_id, problematicen_id, details
                 )
                 VALUES (
                     uuid_generate_v4(),
@@ -440,16 +430,14 @@ BEGIN
                     v_id_rel_geo_verzija,
                     'tao',
                     'orphan_tao_ref_in_lao',
-                    NEW.id,
-                    NEW.id_rel_geo_tao,
-                    'LAO "' || COALESCE(NEW.ime_lao, NEW.id::text) || '" references non-existent TAO: ' || NEW.id_rel_geo_tao::text
+                    NEW.id_rel_geo_tao
                 );
             ELSE
                 -- Remove any "empty_tao" problem for this TAO
                 DELETE FROM md_topoloske_kontrole_hierarhija
-                WHERE entity_type = 'tao'
-                  AND problem_type = 'empty_tao'
-                  AND entity_id = NEW.id_rel_geo_tao;
+                WHERE tip_entitete = 'tao'
+                  AND tip_problema = 'empty_tao'
+                  AND problematicen_id = NEW.id_rel_geo_tao;
             END IF;
         END IF;
     END IF;

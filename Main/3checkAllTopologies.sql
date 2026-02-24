@@ -37,28 +37,27 @@ BEGIN
 
     -- Clear existing holes for this version
     DELETE FROM md_topoloske_kontrole_obm
-    WHERE area_type = 'obm' and id_rel_geo_verzija = p_id_rel_geo_verzija and topology_problem_type = 'hole';
+    WHERE id_rel_geo_verzija = p_id_rel_geo_verzija AND tip_topoloskega_problema = 'luknja';
 
     -- Insert new holes if they exist
     IF v_holes_geom IS NOT NULL AND NOT ST_IsEmpty(v_holes_geom) THEN
         -- Handle multipolygon case - insert each polygon separately
-       INSERT INTO md_topoloske_kontrole_obm (created_at, id, created_by, area_type, id_rel_geo_verzija, topology_problem_type, geom, perimeter, area, compactness)
+       INSERT INTO md_topoloske_kontrole_obm (created_at, id, created_by, id_rel_geo_verzija, tip_topoloskega_problema, geom, obseg, povrsina, kompaktnost)
         SELECT
             now()::timestamp,
             uuid_generate_v4(),
             '848956e8-d73e-11f0-9ff0-02420a000f64',
-            'obm',
             p_id_rel_geo_verzija,
-            'hole',
+            'luknja',
             geom,
-            perimeter,
-            area,
-            4*pi()*area / NULLIF(perimeter * perimeter, 0)   -- (circle has it 0.08 (1/4*pi) and is most compact. Everything else is less compact.)
+            obseg,
+            povrsina,
+            4*pi()*povrsina / NULLIF(obseg * obseg, 0)   -- (circle has it 0.08 (1/4*pi) and is most compact. Everything else is less compact.)
         FROM (
             SELECT
                 geom,
-                ST_Perimeter(geom) as perimeter,
-                ST_Area(geom) as area
+                ST_Perimeter(geom) as obseg,
+                ST_Area(geom) as povrsina
             FROM (
                 SELECT st_reduceprecision((dump_result).geom, 0.01) as geom
                 FROM (
@@ -67,7 +66,7 @@ BEGIN
             ) as dumped_geoms
             WHERE ST_GeometryType(geom) in ('ST_Polygon', 'ST_MultiPolygon')
         ) AS calculated
-        WHERE area > 0;
+        WHERE povrsina > 0;
 
     END IF;
     GET DIAGNOSTICS v_holes_count = ROW_COUNT;
@@ -107,7 +106,7 @@ BEGIN
     END IF;
 
     DELETE FROM md_topoloske_kontrole_obm
-    WHERE area_type = 'obm' and id_rel_geo_verzija = p_id_rel_geo_verzija and topology_problem_type = 'overflow';    -- Mark entries that overflow Slovenia boundary
+    WHERE id_rel_geo_verzija = p_id_rel_geo_verzija AND tip_topoloskega_problema = 'preliv';    -- Mark entries that overflow Slovenia boundary
 
 
 
@@ -151,31 +150,30 @@ BEGIN
 --         ) t
 --     );
 
-    INSERT INTO md_topoloske_kontrole_obm ( id, created_at, created_by, area_type, id_rel_geo_verzija, topology_problem_type, id1, geom, perimeter, area, compactness)
+    INSERT INTO md_topoloske_kontrole_obm ( id, created_at, created_by, id_rel_geo_verzija, tip_topoloskega_problema, id1, geom, obseg, povrsina, kompaktnost)
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
         '848956e8-d73e-11f0-9ff0-02420a000f64',
-        'obm',
         p_id_rel_geo_verzija,
-        'overflow',
+        'preliv',
         id,
         geom,
-        perimeter,
-        area,
-        4*pi()*area / NULLIF(perimeter * perimeter, 0)   -- (circle has it 0.08 (1/4*pi) and is most compact. Everything else is less compact.)
+        obseg,
+        povrsina,
+        4*pi()*povrsina / NULLIF(obseg * obseg, 0)   -- (circle has it 0.08 (1/4*pi) and is most compact. Everything else is less compact.)
     FROM (
         SELECT
             id,
             overflow_geom as geom,
-            ST_Perimeter(overflow_geom) as perimeter,
---                 -1 AS perimeter,
-            ST_Area(overflow_geom) as area
+            ST_Perimeter(overflow_geom) as obseg,
+--                 -1 AS obseg,
+            ST_Area(overflow_geom) as povrsina
         FROM temp_overflows
         WHERE -- NOT ST_Contains(v_slo_meja, overflow_geom) AND
          ST_GeometryType(overflow_geom) in ('ST_Polygon', 'ST_MultiPolygon')
         ) AS calculated
-    WHERE area > 0;
+    WHERE povrsina > 0;
 
     GET DIAGNOSTICS v_overflows_count = ROW_COUNT;
 
@@ -207,7 +205,7 @@ BEGIN
     -- Reset all existing intersections
 
     DELETE FROM md_topoloske_kontrole_obm
-    WHERE area_type = 'obm' and id_rel_geo_verzija = p_id_rel_geo_verzija and topology_problem_type = 'intersection';
+    WHERE id_rel_geo_verzija = p_id_rel_geo_verzija AND tip_topoloskega_problema = 'prekrivanje';
 
 
     -- Find all pairs of intersecting geometries
@@ -235,32 +233,31 @@ BEGIN
       AND ST_Intersects(a.geom, b.geom)
       AND NOT ST_Touches(a.geom, b.geom);
 
-    INSERT INTO md_topoloske_kontrole_obm ( id, created_at, created_by, area_type, id_rel_geo_verzija, topology_problem_type, id1, id2, geom, perimeter, area, compactness)
+    INSERT INTO md_topoloske_kontrole_obm ( id, created_at, created_by, id_rel_geo_verzija, tip_topoloskega_problema, id1, id2, geom, obseg, povrsina, kompaktnost)
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
         '848956e8-d73e-11f0-9ff0-02420a000f64',
-        'obm',
         p_id_rel_geo_verzija,
-        'intersection',
+        'prekrivanje',
         id_a,
         id_b,
         geom,
-        perimeter,
-        area,
-        4*pi()*area / NULLIF(perimeter * perimeter, 0)   -- (circle has it 0.08 (1/4*pi) and is most compact. Everything else is less compact.)
+        obseg,
+        povrsina,
+        4*pi()*povrsina / NULLIF(obseg * obseg, 0)   -- (circle has it 0.08 (1/4*pi) and is most compact. Everything else is less compact.)
     FROM (
         SELECT
             id_a,
             id_b,
             intersection_geom as geom,
-            ST_Perimeter(intersection_geom) as perimeter,
---                 -1 AS perimeter,
-            ST_Area(intersection_geom) as area
+            ST_Perimeter(intersection_geom) as obseg,
+--                 -1 AS obseg,
+            ST_Area(intersection_geom) as povrsina
         FROM temp_intersections
         WHERE  ST_GeometryType(intersection_geom) in ('ST_Polygon', 'ST_MultiPolygon')
         ) AS calculated
-    WHERE area > 0;
+    WHERE povrsina > 0;
 
     GET DIAGNOSTICS v_intersections_count = ROW_COUNT;
 

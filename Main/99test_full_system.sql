@@ -247,27 +247,27 @@ SELECT
     'Holes: ' || COALESCE(COUNT(*)::TEXT, '0') as result
 FROM md_topoloske_kontrole_obm
 WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
-  AND topology_problem_type = 'hole'
+  AND tip_topoloskega_problema = 'luknja'
 UNION ALL
 SELECT
     'Overflows: ' || COALESCE(COUNT(*)::TEXT, '0')
 FROM md_topoloske_kontrole_obm
 WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
-  AND topology_problem_type = 'overflow'
+  AND tip_topoloskega_problema = 'preliv'
 UNION ALL
 SELECT
     'Intersections: ' || COALESCE(COUNT(*)::TEXT, '0')
 FROM md_topoloske_kontrole_obm
 WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
-  AND topology_problem_type = 'intersection';
+  AND tip_topoloskega_problema = 'prekrivanje';
 
 \echo '   Hierarchy Results:'
 SELECT
-    entity_type || ' - ' || problem_type || ': ' || COALESCE(COUNT(*)::TEXT, '0') as result
+    tip_entitete || ' - ' || tip_problema || ': ' || COALESCE(COUNT(*)::TEXT, '0') as result
 FROM md_topoloske_kontrole_hierarhija
 WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
-GROUP BY entity_type, problem_type
-ORDER BY entity_type, problem_type;
+GROUP BY tip_entitete, tip_problema
+ORDER BY tip_entitete, tip_problema;
 
 
 -- ============================================================================
@@ -300,7 +300,7 @@ SELECT
     (SELECT ime_obmocja FROM md_geo_obm WHERE id = id2) || ')'
 FROM md_topoloske_kontrole_obm
 WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
-  AND topology_problem_type = 'intersection';
+  AND tip_topoloskega_problema = 'prekrivanje';
 
 
 -- ============================================================================
@@ -320,13 +320,13 @@ SELECT
     'Holes: ' || COUNT(*) as result
 FROM md_topoloske_kontrole_obm
 WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
-  AND topology_problem_type = 'hole'
+  AND tip_topoloskega_problema = 'luknja'
 UNION ALL
 SELECT
     'Intersections: ' || COUNT(*)
 FROM md_topoloske_kontrole_obm
 WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
-  AND topology_problem_type = 'intersection';
+  AND tip_topoloskega_problema = 'prekrivanje';
 
 
 -- ============================================================================
@@ -343,11 +343,11 @@ WHERE id_rel_geo_obm = (SELECT value FROM test_ids WHERE key='obm3');
 \echo '   Expected: 1 missing_obm_in_cona problem'
 
 SELECT
-    problem_type || ': ' || details
+    tip_problema || ': ' || tip_problema
 FROM md_topoloske_kontrole_hierarhija
 WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
-  AND entity_type = 'cona'
-  AND problem_type = 'missing_obm_in_cona';
+  AND tip_entitete = 'cona'
+  AND tip_problema = 'missing_obm_in_cona';
 
 
 -- ============================================================================
@@ -364,11 +364,11 @@ WHERE id_rel_geo_cona = (SELECT value FROM test_ids WHERE key='cona3');
 \echo '   Expected: 1 empty_cona, 3 missing_obm_in_cona problems'
 
 SELECT
-    entity_type || ' - ' || problem_type || ': ' || COUNT(*) as result
+    tip_entitete || ' - ' || tip_problema || ': ' || COUNT(*) as result
 FROM md_topoloske_kontrole_hierarhija
 WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
-GROUP BY entity_type, problem_type
-ORDER BY entity_type, problem_type;
+GROUP BY tip_entitete, tip_problema
+ORDER BY tip_entitete, tip_problema;
 
 
 -- ============================================================================
@@ -385,11 +385,11 @@ WHERE id = (SELECT value FROM test_ids WHERE key='lao2');
 \echo '   Expected: 1 orphan_lao_ref_in_cona problem added'
 
 SELECT
-    problem_type || ': ' || details
+    tip_problema || ': ' || tip_problema
 FROM md_topoloske_kontrole_hierarhija
 WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
-  AND entity_type = 'lao'
-ORDER BY problem_type;
+  AND tip_entitete = 'lao'
+ORDER BY tip_problema;
 
 
 -- ============================================================================
@@ -403,35 +403,35 @@ ORDER BY problem_type;
 
 \echo 'OBM Topology Problems:'
 SELECT
-    topology_problem_type as type,
+    tip_topoloskega_problema as type,
     COUNT(*) as count,
     STRING_AGG(
         CASE
-            WHEN topology_problem_type = 'intersection' THEN
+            WHEN tip_topoloskega_problema = 'prekrivanje' THEN
                 '(' || (SELECT ime_obmocja FROM md_geo_obm WHERE id = id1) ||
                 ' x ' || (SELECT ime_obmocja FROM md_geo_obm WHERE id = id2) || ')'
-            WHEN topology_problem_type = 'hole' THEN
+            WHEN tip_topoloskega_problema = 'luknja' THEN
                 '(area: ' || ROUND(area::numeric, 2) || ' m²)'
             ELSE 'N/A'
         END,
         ', '
-    ) as details
+    ) as tip_problema
 FROM md_topoloske_kontrole_obm
 WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
-GROUP BY topology_problem_type
-ORDER BY topology_problem_type;
+GROUP BY tip_topoloskega_problema
+ORDER BY tip_topoloskega_problema;
 
 \echo ''
 \echo 'Hierarchy Problems:'
 SELECT
-    entity_type,
-    problem_type,
+    tip_entitete,
+    tip_problema,
     COUNT(*) as count,
-    STRING_AGG(details, '; ') as details
+    STRING_AGG(tip_problema, '; ') as tip_problema
 FROM md_topoloske_kontrole_hierarhija
 WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
-GROUP BY entity_type, problem_type
-ORDER BY entity_type, problem_type;
+GROUP BY tip_entitete, tip_problema
+ORDER BY tip_entitete, tip_problema;
 
 
 -- ============================================================================

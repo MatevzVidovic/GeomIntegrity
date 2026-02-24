@@ -48,9 +48,8 @@ BEGIN
 
         -- OLD.geom might be part of some intersections. If so, remove them.
         DELETE FROM md_topoloske_kontrole_obm
-        WHERE topology_problem_type = 'intersection'
+        WHERE tip_topoloskega_problema = 'prekrivanje'
           and id_rel_geo_verzija = v_id_rel_geo_verzija
-            and area_type = 'obm'
             and (OLD.id = id1 or OLD.id = id2);
 
         -- Start with the removed geometry as potential hole
@@ -83,8 +82,7 @@ BEGIN
             SELECT id, geom
             FROM md_topoloske_kontrole_obm
             WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
-              AND area_type = 'obm'
-              AND topology_problem_type = 'hole'
+              AND tip_topoloskega_problema = 'luknja'
               AND ST_Intersects(geom, v_hole_geom)
         );
 
@@ -109,22 +107,20 @@ BEGIN
                 created_at,
                 created_by,
                 geom,
-                area_type,
                 id_rel_geo_verzija,
-                area,
-                perimeter,
-                topology_problem_type
+                povrsina,
+                obseg,
+                tip_topoloskega_problema
             )
             SELECT
                 uuid_generate_v4(),
                 now()::timestamp,
                 '848956e8-d73e-11f0-9ff0-02420a000f64',
                 hole_geom,
-                'obm',
                 v_id_rel_geo_verzija,
                 ST_Area(hole_geom),
-           st_perimeter(hole_geom),
-                'hole'
+           ST_Perimeter(hole_geom),
+                'luknja'
             FROM (SELECT (ST_Dump(v_hole_geom)).geom AS hole_geom) AS dump
             WHERE ST_Area(hole_geom) > 0;
 
@@ -168,8 +164,8 @@ BEGIN
             id2,
             area,
             perimeter,
-           compactness,
-            topology_problem_type
+           kompaktnost,
+            tip_topoloskega_problema
         )
         SELECT
             uuid_generate_v4(),
@@ -180,21 +176,21 @@ BEGIN
             v_id_rel_geo_verzija,
             LEAST(NEW.id, other_id),
             GREATEST(NEW.ID, other_id),
-            area,
-            perimeter,
-        4*pi()*area / NULLIF(perimeter * perimeter, 0),   -- (circle has it 0.08 (1/4*pi) and is most compact. Everything else is less compact.)
-            'intersection'
+            povrsina,
+            obseg,
+        4*pi()*povrsina / NULLIF(obseg * obseg, 0),   -- (circle has it 0.08 (1/4*pi) and is most compact. Everything else is less compact.)
+            'prekrivanje'
         FROM (
             SELECT
                 other_id,
                 n.intersection_geom AS geom,
-                ST_Perimeter(intersection_geom) as perimeter,
-                ST_Area(intersection_geom) as area
+                ST_Perimeter(intersection_geom) as obseg,
+                ST_Area(intersection_geom) as povrsina
             FROM new_intersections as n
 --             WHERE  ST_GeometryType(intersection_geom) not in ('ST_LineString')
             WHERE  ST_GeometryType(intersection_geom) in ('ST_Polygon', 'ST_MultiPolygon')
             ) AS calculated
-            WHERE area > 0;
+            WHERE povrsina > 0;
 
 
         -- With holes, we take all holes that intersect our insertion geom, we union them into a var,
@@ -208,7 +204,7 @@ BEGIN
           FROM md_topoloske_kontrole_obm
           WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
             AND area_type = 'obm'
-            AND topology_problem_type = 'hole'
+            AND tip_topoloskega_problema = 'luknja'
             AND ST_Intersects(v_insertion_geom, geom)
         );
 
@@ -229,7 +225,7 @@ BEGIN
             id_rel_geo_verzija,
             area,
             perimeter,
-            topology_problem_type
+            tip_topoloskega_problema
         )
         SELECT
             uuid_generate_v4(),
@@ -240,7 +236,7 @@ BEGIN
             v_id_rel_geo_verzija,
             ST_Area(hole_geom),
        st_perimeter(hole_geom),
-            'hole'
+            'luknja'
         FROM (SELECT st_reduceprecision((ST_Dump(v_insertion_hole_union_geom)).geom, 0.01) AS hole_geom) AS dump
         WHERE ST_Area(hole_geom) > 0;
 
