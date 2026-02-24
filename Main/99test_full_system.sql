@@ -67,14 +67,14 @@ VALUES (
 
 DO $$
 DECLARE
-    v_test_version UUID := 'aaaaaaaa-test-0000-0000-000000000001';
-    v_test_model UUID := 'bbbbbbbb-test-0000-0000-000000000001';
-    v_tao_id UUID := 'cccccccc-tao1-0000-0000-000000000001';
-    v_lao1_id UUID := 'dddddddd-lao1-0000-0000-000000000001';
-    v_lao2_id UUID := 'dddddddd-lao2-0000-0000-000000000002';
-    v_cona1_id UUID := 'eeeeeeee-con1-0000-0000-000000000001';
-    v_cona2_id UUID := 'eeeeeeee-con2-0000-0000-000000000002';
-    v_cona3_id UUID := 'eeeeeeee-con3-0000-0000-000000000003';
+    v_test_version UUID := 'aaaaaaaa-aaaa-0000-0000-000000000001';
+    v_test_model UUID := 'bbbbbbbb-bbbb-0000-0000-000000000001';
+    v_tao_id UUID := 'cccccccc-cc01-0000-0000-000000000001';
+    v_lao1_id UUID := 'dddddddd-dd01-0000-0000-000000000001';
+    v_lao2_id UUID := 'dddddddd-dd02-0000-0000-000000000002';
+    v_cona1_id UUID := 'eeeeeeee-ee01-0000-0000-000000000001';
+    v_cona2_id UUID := 'eeeeeeee-ee02-0000-0000-000000000002';
+    v_cona3_id UUID := 'eeeeeeee-ee03-0000-0000-000000000003';
     v_obm_ids UUID[];
     i INTEGER;
 BEGIN
@@ -99,7 +99,7 @@ BEGIN
     FOR i IN 1..9 LOOP
         INSERT INTO test_ids VALUES (
             'obm' || i,
-            ('ffffffff-obm' || i || '-0000-0000-00000000000' || i)::UUID
+            ('ffffffff-ff0' || i || '-0000-0000-00000000000' || i)::UUID
         );
     END LOOP;
 END $$;

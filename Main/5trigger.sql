@@ -1,7 +1,7 @@
 
 
 
-DROP FUNCTION validate_topology_incremental();
+DROP FUNCTION IF EXISTS validate_topology_incremental();
 
 CREATE OR REPLACE FUNCTION validate_topology_incremental()
 RETURNS TRIGGER

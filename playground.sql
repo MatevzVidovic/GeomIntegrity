@@ -1,6 +1,11 @@
 
 
 
+  DROP FUNCTION IF EXISTS validate_holes(uuid);
+  DROP FUNCTION IF EXISTS validate_overflows(uuid);
+  DROP FUNCTION IF EXISTS validate_intersections(uuid);
+  DROP FUNCTION IF EXISTS validate_all(uuid);
+  DROP FUNCTION IF EXISTS validate_all_topologies();
 
 
 \i /Users/matevzvidovic/GeomIntegrity/Main/98load_all_functions.sql

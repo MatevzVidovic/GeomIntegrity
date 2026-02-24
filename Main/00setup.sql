@@ -18,7 +18,7 @@
 
 
 -- ============================================================================
--- STEP 0: You can run all of of this easily: just paste this into playground and run it.
+-- STEP 0: Run \i commands with psql in the terminal, or manually do cmd a, and run the scripts
 -- ============================================================================
 
 --     Possibly uncomment the part in this script about 2_decimal_places
