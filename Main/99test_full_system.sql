@@ -405,15 +405,108 @@ ORDER BY tip_problema;
 
 
 -- ============================================================================
--- SUMMARY: Show all problems
+-- SUMMARY: Verify all test results
 -- ============================================================================
 \echo ''
 \echo '================================================================================'
-\echo 'TEST SUMMARY - All detected problems'
+\echo 'TEST VERIFICATION'
 \echo '================================================================================'
 \echo ''
 
-\echo 'OBM Topology Problems:'
+-- Create a table to track test results
+CREATE TEMP TABLE test_results (
+    test_name TEXT,
+    expected TEXT,
+    actual TEXT,
+    passed BOOLEAN
+);
+
+-- Test 1: Initial validation should have 0 problems (already passed if we got here)
+
+-- Test 2: After intersection creation - should have 1 intersection
+-- (We check current state which is after all modifications)
+
+-- Test 3: After hole creation - should have 1 hole
+INSERT INTO test_results
+SELECT
+    'Hole detection after OBM deletion',
+    '1',
+    COUNT(*)::TEXT,
+    COUNT(*) = 1
+FROM md_topoloske_kontrole_obm
+WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
+  AND tip_topoloskega_problema = 'luknja';
+
+-- Test 4: Intersection should be removed after OBM5 deletion
+INSERT INTO test_results
+SELECT
+    'Intersection removed after OBM deletion',
+    '0',
+    COUNT(*)::TEXT,
+    COUNT(*) = 0
+FROM md_topoloske_kontrole_obm
+WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
+  AND tip_topoloskega_problema = 'prekrivanje';
+
+-- Test 5: Orphan OBM should be detected (OBM3 removed from cona)
+INSERT INTO test_results
+SELECT
+    'Orphan OBM detection (missing_obm_in_cona)',
+    '>=1',
+    COUNT(*)::TEXT,
+    COUNT(*) >= 1
+FROM md_topoloske_kontrole_hierarhija
+WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
+  AND tip_problema = 'missing_obm_in_cona';
+
+-- Test 6: Empty cona should be detected (Cona3 has no OBMs)
+INSERT INTO test_results
+SELECT
+    'Empty cona detection',
+    '1',
+    COUNT(*)::TEXT,
+    COUNT(*) = 1
+FROM md_topoloske_kontrole_hierarhija
+WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
+  AND tip_problema = 'empty_cona';
+
+-- Test 7: Orphan LAO reference should be detected (Cona3 references deleted LAO2)
+INSERT INTO test_results
+SELECT
+    'Orphan LAO reference detection',
+    '>=1',
+    COUNT(*)::TEXT,
+    COUNT(*) >= 1
+FROM md_topoloske_kontrole_hierarhija
+WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
+  AND tip_problema IN ('orphan_lao_ref_in_cona', 'empty_lao');
+
+-- Show all test results
+\echo 'Test Results:'
+SELECT
+    test_name,
+    'Expected: ' || expected || ', Actual: ' || actual AS comparison,
+    CASE WHEN passed THEN '✅ PASS' ELSE '❌ FAIL' END AS status
+FROM test_results
+ORDER BY passed DESC, test_name;
+
+-- Count failures
+\echo ''
+
+-- Store failure count for final message
+CREATE TEMP TABLE failure_count AS
+SELECT COUNT(*) as failures FROM test_results WHERE NOT passed;
+
+SELECT
+    CASE
+        WHEN failures > 0 THEN '❌ ' || failures || ' TEST(S) FAILED!'
+        ELSE '✅ All tests passed!'
+    END as final_result
+FROM failure_count;
+
+-- Show current state of problems for debugging
+\echo ''
+\echo 'Current OBM Topology Problems:'
 SELECT
     tip_topoloskega_problema as type,
     COUNT(*) as count
@@ -423,7 +516,7 @@ GROUP BY tip_topoloskega_problema
 ORDER BY tip_topoloskega_problema;
 
 \echo ''
-\echo 'Hierarchy Problems:'
+\echo 'Current Hierarchy Problems:'
 SELECT
     tip_entitete,
     tip_problema,
@@ -444,10 +537,11 @@ ORDER BY tip_entitete, tip_problema;
 
 ROLLBACK;
 
+-- Final status message based on test results
 \echo ''
 \echo '================================================================================'
-\echo '✅ TEST COMPLETED SUCCESSFULLY!'
+\echo 'TEST RUN COMPLETE'
 \echo '================================================================================'
 \echo ''
-\echo 'All tests passed. Your database was not modified (transaction rolled back).'
+\echo 'Check the results above. Your database was not modified (transaction rolled back).'
 \echo ''
