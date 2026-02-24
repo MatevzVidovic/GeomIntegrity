@@ -1,5 +1,6 @@
 
 
+DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm;
 
 DROP FUNCTION IF EXISTS validate_topology_incremental();
 
@@ -115,7 +116,7 @@ BEGIN
             SELECT
                 uuid_generate_v4(),
                 now()::timestamp,
-                '848956e8-d73e-11f0-9ff0-02420a000f64',
+                '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
                 hole_geom,
                 v_id_rel_geo_verzija,
                 ST_Area(hole_geom),
@@ -169,7 +170,7 @@ BEGIN
         SELECT
             uuid_generate_v4(),
             now()::timestamp,
-            '848956e8-d73e-11f0-9ff0-02420a000f64',
+            '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
             geom,
             v_id_rel_geo_verzija,
             LEAST(NEW.id, other_id),
@@ -226,7 +227,7 @@ BEGIN
         SELECT
             uuid_generate_v4(),
             now()::timestamp,
-            '848956e8-d73e-11f0-9ff0-02420a000f64',
+            '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
             hole_geom,
             v_id_rel_geo_verzija,
             ST_Area(hole_geom),

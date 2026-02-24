@@ -8,6 +8,9 @@
 --
 -- These are ID-based checks, not geometric operations.
 --
+-- IMPORTANT: md_geo_cona does NOT have id_rel_geo_verzija!
+-- We get the version from OBMs (which have id_rel_geo_verzija).
+--
 -- Problem types:
 --   - 'missing_obm_in_cona': An OBM exists but is not assigned to any cona
 --   - 'orphan_obm_ref': obmxcona references an OBM that doesn't exist
@@ -20,31 +23,6 @@
 --   - 'orphan_tao_ref_in_lao': A lao references a tao that doesn't exist
 --   - 'empty_tao': A tao exists but has no laos assigned
 -- ============================================================================
-
-
--- ============================================================================
--- Table: md_topoloske_kontrole_hierarhija
--- ============================================================================
--- Stores hierarchy validation problems (ID-based, no geometry)
-
--- CREATE TABLE IF NOT EXISTS md_topoloske_kontrole_hierarhija (
---     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
---     created_at TIMESTAMP DEFAULT now(),
---     created_by UUID,
---     id_rel_geo_verzija UUID NOT NULL,
---     tip_entitete TEXT NOT NULL,  -- 'cona', 'lao', 'tao'
---     tip_problema TEXT NOT NULL,
---     entity_id UUID,             -- The entity with the problem
---     reference_id UUID,          -- The missing/orphan reference
---     details TEXT                -- Additional context
--- );
-
--- CREATE INDEX IF NOT EXISTS idx_topoloske_kontrole_hierarhija
--- ON md_topoloske_kontrole_hierarhija (
---     id_rel_geo_verzija,
---     tip_entitete,
---     tip_problema
--- );
 
 
 -- ============================================================================
@@ -85,7 +63,7 @@ BEGIN
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64',
+        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
         p_id_rel_geo_verzija,
         'cona',
         'missing_obm_in_cona',
@@ -99,37 +77,43 @@ BEGIN
     GET DIAGNOSTICS v_missing_obms = ROW_COUNT;
 
     -- 2. Find obmxcona entries referencing non-existent OBMs
+    -- (for OBMs in this version's conas)
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_geo_verzija,
-        tip_entitete, tip_problema, reference_id, details
+        tip_entitete, tip_problema, problematicen_id
     )
-    SELECT
+    SELECT DISTINCT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64',
+        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
         p_id_rel_geo_verzija,
         'cona',
         'orphan_obm_ref',
         xc.id_rel_geo_obm
     FROM md_geo_obmxcona xc
-    JOIN md_geo_cona c ON xc.id_rel_geo_cona = c.id
-    WHERE c.id_rel_geo_verzija = p_id_rel_geo_verzija
-      AND NOT EXISTS (
+    WHERE NOT EXISTS (
           SELECT 1 FROM md_geo_obm obm
           WHERE obm.id = xc.id_rel_geo_obm
             AND obm.id_rel_geo_verzija = p_id_rel_geo_verzija
+      )
+      -- Only check for conas linked to OBMs in this version
+      AND EXISTS (
+          SELECT 1 FROM md_geo_obmxcona xc2
+          JOIN md_geo_obm obm2 ON xc2.id_rel_geo_obm = obm2.id
+          WHERE xc2.id_rel_geo_cona = xc.id_rel_geo_cona
+            AND obm2.id_rel_geo_verzija = p_id_rel_geo_verzija
       );
     GET DIAGNOSTICS v_orphan_obm_refs = ROW_COUNT;
 
     -- 3. Find obmxcona entries referencing non-existent conas
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_geo_verzija,
-        tip_entitete, tip_problema, reference_id, details
+        tip_entitete, tip_problema, problematicen_id
     )
-    SELECT
+    SELECT DISTINCT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64',
+        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
         p_id_rel_geo_verzija,
         'cona',
         'orphan_cona_ref',
@@ -140,11 +124,10 @@ BEGIN
       AND NOT EXISTS (
           SELECT 1 FROM md_geo_cona c
           WHERE c.id = xc.id_rel_geo_cona
-            AND c.id_rel_geo_verzija = p_id_rel_geo_verzija
       );
     GET DIAGNOSTICS v_orphan_cona_refs = ROW_COUNT;
 
-    -- 4. Find conas with no OBMs
+    -- 4. Find conas with no OBMs (for conas linked to this version)
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
@@ -152,13 +135,18 @@ BEGIN
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64',
+        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
         p_id_rel_geo_verzija,
         'cona',
         'empty_cona',
         c.id
     FROM md_geo_cona c
-    WHERE c.id_rel_geo_verzija = p_id_rel_geo_verzija
+    WHERE c.id_rel_verzije_modeli = (
+        SELECT DISTINCT obm.id_rel_geo_verzija
+        FROM md_geo_obm obm
+        WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
+        LIMIT 1
+    )
       AND NOT EXISTS (
           SELECT 1 FROM md_geo_obmxcona xc
           WHERE xc.id_rel_geo_cona = c.id
@@ -192,27 +180,37 @@ DECLARE
     v_missing_conas INTEGER := 0;
     v_orphan_lao_refs INTEGER := 0;
     v_empty_laos INTEGER := 0;
+    v_id_rel_verzije_modeli UUID;
 BEGIN
+    -- Get the model version from OBMs
+    SELECT DISTINCT obm.id_rel_geo_verzija INTO v_id_rel_verzije_modeli
+    FROM md_geo_obm obm
+    WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
+    LIMIT 1;
+
     -- Clear existing lao problems for this version
     DELETE FROM md_topoloske_kontrole_hierarhija
     WHERE id_rel_geo_verzija = p_id_rel_geo_verzija
       AND tip_entitete = 'lao';
 
     -- 1. Find conas not assigned to any lao (id_rel_geo_lao IS NULL)
+    -- Only check conas that have OBMs in this version
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
     )
-    SELECT
+    SELECT DISTINCT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64',
+        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
         p_id_rel_geo_verzija,
         'lao',
         'missing_cona_in_lao',
         c.id
     FROM md_geo_cona c
-    WHERE c.id_rel_geo_verzija = p_id_rel_geo_verzija
+    JOIN md_geo_obmxcona xc ON xc.id_rel_geo_cona = c.id
+    JOIN md_geo_obm obm ON xc.id_rel_geo_obm = obm.id
+    WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
       AND c.id_rel_geo_lao IS NULL;
     GET DIAGNOSTICS v_missing_conas = ROW_COUNT;
 
@@ -221,16 +219,18 @@ BEGIN
         id, created_at, created_by, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
     )
-    SELECT
+    SELECT DISTINCT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64',
+        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
         p_id_rel_geo_verzija,
         'lao',
         'orphan_lao_ref_in_cona',
         c.id_rel_geo_lao
     FROM md_geo_cona c
-    WHERE c.id_rel_geo_verzija = p_id_rel_geo_verzija
+    JOIN md_geo_obmxcona xc ON xc.id_rel_geo_cona = c.id
+    JOIN md_geo_obm obm ON xc.id_rel_geo_obm = obm.id
+    WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
       AND c.id_rel_geo_lao IS NOT NULL
       AND NOT EXISTS (
           SELECT 1 FROM md_geo_lao l
@@ -238,7 +238,7 @@ BEGIN
       );
     GET DIAGNOSTICS v_orphan_lao_refs = ROW_COUNT;
 
-    -- 3. Find laos with no conas
+    -- 3. Find laos with no conas (for this model version)
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
@@ -246,22 +246,19 @@ BEGIN
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64',
+        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
         p_id_rel_geo_verzija,
         'lao',
         'empty_lao',
         l.id
     FROM md_geo_lao l
-    WHERE l.id_rel_verzije_modeli = (
-        SELECT DISTINCT c.id_rel_verzije_modeli
-        FROM md_geo_cona c
-        WHERE c.id_rel_geo_verzija = p_id_rel_geo_verzija
-        LIMIT 1
-    )
+    WHERE l.id_rel_verzije_modeli = v_id_rel_verzije_modeli
       AND NOT EXISTS (
           SELECT 1 FROM md_geo_cona c
+          JOIN md_geo_obmxcona xc ON xc.id_rel_geo_cona = c.id
+          JOIN md_geo_obm obm ON xc.id_rel_geo_obm = obm.id
           WHERE c.id_rel_geo_lao = l.id
-            AND c.id_rel_geo_verzija = p_id_rel_geo_verzija
+            AND obm.id_rel_geo_verzija = p_id_rel_geo_verzija
       );
     GET DIAGNOSTICS v_empty_laos = ROW_COUNT;
 
@@ -294,14 +291,14 @@ DECLARE
     v_empty_taos INTEGER := 0;
     v_id_rel_verzije_modeli UUID;
 BEGIN
-    -- Get the model version ID from conas for this geo version
-    SELECT DISTINCT c.id_rel_verzije_modeli INTO v_id_rel_verzije_modeli
-    FROM md_geo_cona c
-    WHERE c.id_rel_geo_verzija = p_id_rel_geo_verzija
+    -- Get the model version from OBMs
+    SELECT DISTINCT obm.id_rel_geo_verzija INTO v_id_rel_verzije_modeli
+    FROM md_geo_obm obm
+    WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
     LIMIT 1;
 
     IF v_id_rel_verzije_modeli IS NULL THEN
-        -- No conas for this version, nothing to validate
+        -- No OBMs for this version, nothing to validate
         RETURN QUERY SELECT 0, 0, 0;
         RETURN;
     END IF;
@@ -319,7 +316,7 @@ BEGIN
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64',
+        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
         p_id_rel_geo_verzija,
         'tao',
         'missing_lao_in_tao',
@@ -337,7 +334,7 @@ BEGIN
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64',
+        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
         p_id_rel_geo_verzija,
         'tao',
         'orphan_tao_ref_in_lao',
@@ -359,7 +356,7 @@ BEGIN
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64',
+        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
         p_id_rel_geo_verzija,
         'tao',
         'empty_tao',

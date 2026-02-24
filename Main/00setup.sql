@@ -19,6 +19,8 @@
 
 -- ============================================================================
 -- STEP 0: Run \i commands with psql in the terminal, or manually do cmd a, and run the scripts
+        -- cd into Main first
+--     ➜  Main git:(main) ✗ psql -h test.gurs.db.flycom.si -p 5432 -U gurs_readwrite -d postgres -W
 -- ============================================================================
 
 --     Possibly uncomment the part in this script about 2_decimal_places
@@ -27,6 +29,8 @@
 -- \i /Users/matevzvidovic/GeomIntegrity/Main/00setup.sql
 --
 -- \i /Users/matevzvidovic/GeomIntegrity/Main/98load_all_functions.sql
+
+-- \i /Users/matevzvidovic/GeomIntegrity/Main/99test_full_system.sql
 --
 -- SELECT * FROM validate_all_topologies();
 

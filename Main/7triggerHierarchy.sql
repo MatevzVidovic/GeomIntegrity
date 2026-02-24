@@ -9,6 +9,12 @@
 -- ============================================================================
 
 
+DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona;
+DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona;
+DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao;
+
+
+
 -- ============================================================================
 -- TRIGGER FUNCTION: validate_obmxcona_incremental
 -- ============================================================================
@@ -32,10 +38,12 @@ BEGIN
     -- PHASE 1: HANDLE REMOVAL (DELETE or UPDATE)
     -- ========================================================================
     IF (TG_OP = 'DELETE' OR TG_OP = 'UPDATE') THEN
-        -- Get the geo version from the old cona
-        SELECT id_rel_geo_verzija INTO v_id_rel_geo_verzija
-        FROM md_geo_cona
-        WHERE id = OLD.id_rel_geo_cona;
+        -- Get the geo version from OBMs linked to this cona
+        SELECT DISTINCT obm.id_rel_geo_verzija INTO v_id_rel_geo_verzija
+        FROM md_geo_obm obm
+        JOIN md_geo_obmxcona xc ON xc.id_rel_geo_obm = obm.id
+        WHERE xc.id_rel_geo_cona = OLD.id_rel_geo_cona
+        LIMIT 1;
 
         IF v_id_rel_geo_verzija IS NOT NULL THEN
             -- Remove any existing problems related to this link
@@ -66,7 +74,7 @@ BEGIN
                     SELECT
                         uuid_generate_v4(),
                         now()::timestamp,
-                        '848956e8-d73e-11f0-9ff0-02420a000f64',
+                        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
                         v_id_rel_geo_verzija,
                         'cona',
                         'missing_obm_in_cona',
@@ -89,7 +97,7 @@ BEGIN
                 SELECT
                     uuid_generate_v4(),
                     now()::timestamp,
-                    '848956e8-d73e-11f0-9ff0-02420a000f64',
+                    '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
                     v_id_rel_geo_verzija,
                     'cona',
                     'empty_cona',
@@ -109,10 +117,10 @@ BEGIN
     -- PHASE 2: HANDLE ADDITION (INSERT or UPDATE)
     -- ========================================================================
     IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') THEN
-        -- Get the geo version from the new cona
+        -- Get the geo version from OBM being linked
         SELECT id_rel_geo_verzija INTO v_id_rel_geo_verzija
-        FROM md_geo_cona
-        WHERE id = NEW.id_rel_geo_cona;
+        FROM md_geo_obm
+        WHERE id = NEW.id_rel_geo_obm;
 
         -- Check if OBM exists
         v_obm_exists := EXISTS (
@@ -135,7 +143,7 @@ BEGIN
             VALUES (
                 uuid_generate_v4(),
                 now()::timestamp,
-                '848956e8-d73e-11f0-9ff0-02420a000f64',
+                '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
                 v_id_rel_geo_verzija,
                 'cona',
                 'orphan_obm_ref',
@@ -165,7 +173,7 @@ BEGIN
             VALUES (
                 uuid_generate_v4(),
                 now()::timestamp,
-                '848956e8-d73e-11f0-9ff0-02420a000f64',
+                '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
                 v_id_rel_geo_verzija,
                 'cona',
                 'orphan_cona_ref',
@@ -215,14 +223,22 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_lao_exists BOOLEAN;
+    v_id_rel_geo_verzija UUID;
 BEGIN
+    -- Get the geo version from OBMs linked to this cona
+    SELECT DISTINCT obm.id_rel_geo_verzija INTO v_id_rel_geo_verzija
+    FROM md_geo_obm obm
+    JOIN md_geo_obmxcona xc ON xc.id_rel_geo_obm = obm.id
+    WHERE xc.id_rel_geo_cona = COALESCE(NEW.id, OLD.id)
+    LIMIT 1;
+
     -- ========================================================================
     -- PHASE 1: HANDLE REMOVAL (DELETE or UPDATE of id_rel_geo_lao)
     -- ========================================================================
     IF (TG_OP = 'DELETE' OR (TG_OP = 'UPDATE' AND OLD.id_rel_geo_lao IS DISTINCT FROM NEW.id_rel_geo_lao)) THEN
         -- Remove old problems for this cona
         DELETE FROM md_topoloske_kontrole_hierarhija
-        WHERE id_rel_geo_verzija = OLD.id_rel_geo_verzija
+        WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
           AND tip_entitete = 'lao'
           AND problematicen_id = OLD.id;
 
@@ -232,7 +248,7 @@ BEGIN
                 SELECT 1 FROM md_geo_cona c
                 WHERE c.id_rel_geo_lao = OLD.id_rel_geo_lao
                   AND c.id != OLD.id
-                  AND c.id_rel_geo_verzija = OLD.id_rel_geo_verzija
+                  AND c.id_rel_verzije_modeli = OLD.id_rel_verzije_modeli
             ) THEN
                 INSERT INTO md_topoloske_kontrole_hierarhija (
                     id, created_at, created_by, id_rel_geo_verzija,
@@ -241,8 +257,8 @@ BEGIN
                 SELECT
                     uuid_generate_v4(),
                     now()::timestamp,
-                    '848956e8-d73e-11f0-9ff0-02420a000f64',
-                    OLD.id_rel_geo_verzija,
+                    '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+                    v_id_rel_geo_verzija,
                     'lao',
                     'empty_lao',
                     l.id
@@ -270,8 +286,8 @@ BEGIN
             VALUES (
                 uuid_generate_v4(),
                 now()::timestamp,
-                '848956e8-d73e-11f0-9ff0-02420a000f64',
-                NEW.id_rel_geo_verzija,
+                '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+                v_id_rel_geo_verzija,
                 'lao',
                 'missing_cona_in_lao',
                 NEW.id
@@ -287,13 +303,13 @@ BEGIN
                 -- Record orphan LAO reference
                 INSERT INTO md_topoloske_kontrole_hierarhija (
                     id, created_at, created_by, id_rel_geo_verzija,
-                    tip_entitete, tip_problema, problematicen_id, problematicen_id, details
+                    tip_entitete, tip_problema, problematicen_id
                 )
                 VALUES (
                     uuid_generate_v4(),
                     now()::timestamp,
-                    '848956e8-d73e-11f0-9ff0-02420a000f64',
-                    NEW.id_rel_geo_verzija,
+                    '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+                    v_id_rel_geo_verzija,
                     'lao',
                     'orphan_lao_ref_in_cona',
                     NEW.id_rel_geo_lao
@@ -345,9 +361,11 @@ DECLARE
     v_tao_exists BOOLEAN;
     v_id_rel_geo_verzija UUID;
 BEGIN
-    -- Get the geo version from related conas
-    SELECT DISTINCT c.id_rel_geo_verzija INTO v_id_rel_geo_verzija
-    FROM md_geo_cona c
+    -- Get the geo version from OBMs linked to conas in this LAO
+    SELECT DISTINCT obm.id_rel_geo_verzija INTO v_id_rel_geo_verzija
+    FROM md_geo_obm obm
+    JOIN md_geo_obmxcona xc ON xc.id_rel_geo_obm = obm.id
+    JOIN md_geo_cona c ON xc.id_rel_geo_cona = c.id
     WHERE c.id_rel_geo_lao = COALESCE(NEW.id, OLD.id)
     LIMIT 1;
 
@@ -375,7 +393,7 @@ BEGIN
                 SELECT
                     uuid_generate_v4(),
                     now()::timestamp,
-                    '848956e8-d73e-11f0-9ff0-02420a000f64',
+                    '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
                     v_id_rel_geo_verzija,
                     'tao',
                     'empty_tao',
@@ -404,7 +422,7 @@ BEGIN
             VALUES (
                 uuid_generate_v4(),
                 now()::timestamp,
-                '848956e8-d73e-11f0-9ff0-02420a000f64',
+                '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
                 v_id_rel_geo_verzija,
                 'tao',
                 'missing_lao_in_tao',
@@ -421,12 +439,12 @@ BEGIN
                 -- Record orphan TAO reference
                 INSERT INTO md_topoloske_kontrole_hierarhija (
                     id, created_at, created_by, id_rel_geo_verzija,
-                    tip_entitete, tip_problema, problematicen_id, problematicen_id, details
+                    tip_entitete, tip_problema, problematicen_id
                 )
                 VALUES (
                     uuid_generate_v4(),
                     now()::timestamp,
-                    '848956e8-d73e-11f0-9ff0-02420a000f64',
+                    '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
                     v_id_rel_geo_verzija,
                     'tao',
                     'orphan_tao_ref_in_lao',

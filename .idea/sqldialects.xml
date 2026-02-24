@@ -8,6 +8,9 @@
     <file url="file://$PROJECT_DIR$/Main/1make2decimalPlaces.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/Main/3checkAllTopologies.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/Main/5trigger.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/Main/6validateHierarchy.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/Main/7triggerHierarchy.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/Main/99test_full_system.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/playground.sql" dialect="PostgreSQL" />
   </component>
 </project>

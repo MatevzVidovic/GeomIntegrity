@@ -1,4 +1,106 @@
 
+  DROP FUNCTION IF EXISTS validate_all_hierarchy(uuid);
+
+
+  SELECT COUNT(*) FROM public.slo_meja;
+
+  SELECT table_name FROM information_schema.tables
+  WHERE table_name LIKE '%meja%' OR table_name LIKE '%slo%' OR table_name LIKE '%boundary%';
+
+  SELECT table_schema, table_name
+  FROM information_schema.tables
+  WHERE table_name = 'slo_meja';
+
+  SELECT proname FROM pg_proc WHERE proname LIKE 'validate_%' ORDER BY proname;
+
+
+  CREATE OR REPLACE FUNCTION validate_all_hierarchy(p_id_rel_geo_verzija uuid)
+  RETURNS TABLE(
+      chosen_id_rel_geo_verzija uuid,
+      cona_missing_obms INTEGER,
+      cona_orphan_obm_refs INTEGER,
+      cona_orphan_cona_refs INTEGER,
+      cona_empty INTEGER,
+      lao_missing_conas INTEGER,
+      lao_orphan_refs INTEGER,
+      lao_empty INTEGER,
+      tao_missing_laos INTEGER,
+      tao_orphan_refs INTEGER,
+      tao_empty INTEGER
+  )
+  LANGUAGE plpgsql
+  AS $$
+  DECLARE
+      v_cona_results RECORD;
+      v_lao_results RECORD;
+      v_tao_results RECORD;
+  BEGIN
+      SELECT * INTO v_cona_results FROM validate_cona_hierarchy(p_id_rel_geo_verzija);
+      SELECT * INTO v_lao_results FROM validate_lao_hierarchy(p_id_rel_geo_verzija);
+      SELECT * INTO v_tao_results FROM validate_tao_hierarchy(p_id_rel_geo_verzija);
+
+      RETURN QUERY SELECT
+          p_id_rel_geo_verzija,
+          v_cona_results.missing_obms,
+          v_cona_results.orphan_obm_refs,
+          v_cona_results.orphan_cona_refs,
+          v_cona_results.empty_conas,
+          v_lao_results.missing_conas,
+          v_lao_results.orphan_lao_refs,
+          v_lao_results.empty_laos,
+          v_tao_results.missing_laos,
+          v_tao_results.orphan_tao_refs,
+          v_tao_results.empty_taos;
+  END;
+  $$;
+
+
+  SELECT tablename FROM pg_tables WHERE tablename = 'md_topoloske_kontrole_hierarhija';
+
+  SELECT proname FROM pg_proc WHERE proname LIKE 'validate_%' ORDER BY proname;
+
+DROP FUNCTION IF EXISTS validate_obmxcona_incremental() CASCADE;
+
+
+  -- Drop all hierarchy functions
+  DROP FUNCTION IF EXISTS validate_cona_hierarchy(uuid) CASCADE;
+  DROP FUNCTION IF EXISTS validate_lao_hierarchy(uuid) CASCADE;
+  DROP FUNCTION IF EXISTS validate_tao_hierarchy(uuid) CASCADE;
+  DROP FUNCTION IF EXISTS validate_all_hierarchy(uuid) CASCADE;
+  DROP FUNCTION IF EXISTS validate_all_hierarchies() CASCADE;
+  DROP FUNCTION IF EXISTS validate_cona_lao_incremental() CASCADE;
+  DROP FUNCTION IF EXISTS validate_lao_tao_incremental() CASCADE;
+  DROP FUNCTION IF EXISTS validate_obmxcona_incremental() CASCADE;
+
+
+  SELECT column_name
+  FROM information_schema.columns
+  WHERE table_name = 'md_geo_cona'
+  ORDER BY ordinal_position;
+
+
+  SELECT prosrc
+  FROM pg_proc
+  WHERE proname = 'validate_lao_tao_incremental';
+
+  -- First, drop all the old cached functions
+  DROP FUNCTION IF EXISTS validate_lao_tao_incremental() CASCADE;
+  DROP FUNCTION IF EXISTS validate_cona_lao_incremental() CASCADE;
+  DROP FUNCTION IF EXISTS validate_obmxcona_incremental() CASCADE;
+  DROP FUNCTION IF EXISTS validate_topology_incremental() CASCADE;
+  DROP FUNCTION IF EXISTS validate_holes(uuid) CASCADE;
+  DROP FUNCTION IF EXISTS validate_overflows(uuid) CASCADE;
+  DROP FUNCTION IF EXISTS validate_intersections(uuid) CASCADE;
+  DROP FUNCTION IF EXISTS validate_all(uuid) CASCADE;
+  DROP FUNCTION IF EXISTS validate_all_topologies() CASCADE;
+  DROP FUNCTION IF EXISTS validate_cona_hierarchy(uuid) CASCADE;
+  DROP FUNCTION IF EXISTS validate_lao_hierarchy(uuid) CASCADE;
+  DROP FUNCTION IF EXISTS validate_tao_hierarchy(uuid) CASCADE;
+  DROP FUNCTION IF EXISTS validate_all_hierarchy(uuid) CASCADE;
+  DROP FUNCTION IF EXISTS validate_all_hierarchies() CASCADE;
+
+
+
 
 
   DROP FUNCTION IF EXISTS validate_holes(uuid);

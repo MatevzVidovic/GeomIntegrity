@@ -46,7 +46,7 @@ BEGIN
         SELECT
             now()::timestamp,
             uuid_generate_v4(),
-            '848956e8-d73e-11f0-9ff0-02420a000f64',
+            '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
             p_id_rel_geo_verzija,
             'luknja',
             geom,
@@ -154,7 +154,7 @@ BEGIN
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64',
+        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
         p_id_rel_geo_verzija,
         'preliv',
         id,
@@ -237,7 +237,7 @@ BEGIN
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64',
+        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
         p_id_rel_geo_verzija,
         'prekrivanje',
         id_a,
