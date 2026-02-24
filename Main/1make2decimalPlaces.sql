@@ -1,10 +1,6 @@
 
 
 
-SELECT PostGIS_Full_Version();
-
-
-select * from validate_2_decimal_places();
 
 DROP FUNCTION IF EXISTS validate_2_decimal_places();
 
@@ -90,7 +86,6 @@ END $$;
 
 
 
-SELECT * FROM set_to_2_decimal_places();
 
 CREATE OR REPLACE FUNCTION set_to_2_decimal_places()
 RETURNS void

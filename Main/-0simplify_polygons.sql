@@ -3,11 +3,6 @@
 
 
 
-select * from simplify_polygons();
-
-DROP FUNCTION simplify_polygons();
-
-select * from simplify_polygons();
 
 CREATE OR REPLACE FUNCTION simplify_polygons( )
 RETURNS void
@@ -75,30 +70,6 @@ END $$;
 
 
 
-select * from get_num_points_statistics(NULL);
-696.3981693363844394,5,36,62,102,141,197,286,447,794.2000000000003,1729.400000000002,36537,3059
-
-select * from get_num_points_statistics(2);
-10.0
-563.2618502778685845,5,35,60,96,133,186,269.79999999999995,416,700.2000000000003,1514.4000000000005,16649,3059
-
-select * from get_num_points_statistics(3);
-100.0
-435.0385746976135992,5,31,53,85,118,162,233.5999999999999,353,564.8000000000002,1228.2000000000003,9572,3059
-
-
-
-select * from get_num_points_statistics(6);
-321.7701863354037267,5,36,62,91,113,131,150,226.19999999999982,470.4000000000001,835.2000000000003,5896,3059
-
-
-
-
-
-select * from get_num_points_statistics(4);
-447.5720823798627002,5,36,60,96,130,174,246.79999999999995,378.7999999999997,604,1228.2000000000003,9572,3059
-
-
 CREATE OR REPLACE FUNCTION public.simplify_obm_geom(g geometry)
 RETURNS geometry
 LANGUAGE plpgsql
@@ -138,10 +109,6 @@ BEGIN
 END;
 $$;
 
-
-
-select * from get_num_points_statistics(5);
-332.3291925465838509,5,35,48,68,93,149,216.79999999999995,314.5999999999999,470.4000000000001,835.2000000000003,5896,3059
 
 
 
@@ -188,9 +155,6 @@ $$;
 
 
 
-
-select * from get_num_points_statistics(6);
-321.7701863354037267,5,36,62,91,113,131,150,226.19999999999982,470.4000000000001,835.2000000000003,5896,3059
 
 CREATE OR REPLACE FUNCTION public.simplify_obm_geom(g geometry)
 RETURNS geometry
