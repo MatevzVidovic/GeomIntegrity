@@ -29,7 +29,7 @@ BEGIN
     -- if intersects with anyone, create a new intersection
 
     -- With holes, we take all holes that intersect our insertion geom, we union them into a var,
-    -- we delete them from md_topoloske_kontrole, we remove the inserting geom from the union
+    -- we delete them from md_topoloske_kontrole_obm, we remove the inserting geom from the union
     -- we then ST_Dump the union and insert new holes.
     -- This is necessary to handle cases where holes get split into 2 by the insertion.
 
@@ -47,7 +47,7 @@ BEGIN
         v_id_rel_geo_verzija := OLD.id_rel_geo_verzija;
 
         -- OLD.geom might be part of some intersections. If so, remove them.
-        DELETE FROM md_topoloske_kontrole
+        DELETE FROM md_topoloske_kontrole_obm
         WHERE topology_problem_type = 'intersection'
           and id_rel_geo_verzija = v_id_rel_geo_verzija
             and area_type = 'obm'
@@ -81,7 +81,7 @@ BEGIN
         DROP TABLE IF EXISTS intersecting_holes;
         CREATE TEMP TABLE intersecting_holes ON COMMIT DROP AS (
             SELECT id, geom
-            FROM md_topoloske_kontrole
+            FROM md_topoloske_kontrole_obm
             WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
               AND area_type = 'obm'
               AND topology_problem_type = 'hole'
@@ -98,13 +98,13 @@ BEGIN
         end if;
 
         -- Delete overlapping holes (we'll insert the merged one)
-        DELETE FROM md_topoloske_kontrole
+        DELETE FROM md_topoloske_kontrole_obm
         WHERE id IN (select id from intersecting_holes);
 
         -- Insert the merged hole(s)
         IF v_hole_geom IS NOT NULL AND NOT ST_IsEmpty(v_hole_geom) THEN
 
-            INSERT INTO md_topoloske_kontrole (
+            INSERT INTO md_topoloske_kontrole_obm (
                 id,
                 created_at,
                 created_by,
@@ -157,7 +157,7 @@ BEGIN
 
         );
 
-        INSERT INTO md_topoloske_kontrole (
+        INSERT INTO md_topoloske_kontrole_obm (
             id,
             created_at,
             created_by,
@@ -198,14 +198,14 @@ BEGIN
 
 
         -- With holes, we take all holes that intersect our insertion geom, we union them into a var,
-        -- we delete them from md_topoloske_kontrole, we remove the inserting geom from the union
+        -- we delete them from md_topoloske_kontrole_obm, we remove the inserting geom from the union
         -- we then ST_Dump the union and insert new holes.
         -- This is necessary to handle cases where holes get split into 2 by the insertion.
 
         DROP TABLE IF EXISTS intersecting_holes;
         CREATE TEMP TABLE intersecting_holes ON COMMIT DROP AS (
           SELECT id
-          FROM md_topoloske_kontrole
+          FROM md_topoloske_kontrole_obm
           WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
             AND area_type = 'obm'
             AND topology_problem_type = 'hole'
@@ -213,14 +213,14 @@ BEGIN
         );
 
         v_insertion_hole_union_geom := (SELECT st_union(geom)
-                                        from md_topoloske_kontrole
+                                        from md_topoloske_kontrole_obm
                                         where id in (select id from intersecting_holes));
         v_insertion_hole_union_geom := st_difference(v_insertion_hole_union_geom, v_insertion_geom);
 
-        DELETE FROM md_topoloske_kontrole
+        DELETE FROM md_topoloske_kontrole_obm
         WHERE id IN (select id from intersecting_holes);
 
-        INSERT INTO md_topoloske_kontrole (
+        INSERT INTO md_topoloske_kontrole_obm (
             id,
             created_at,
             created_by,

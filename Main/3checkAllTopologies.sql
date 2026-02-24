@@ -36,13 +36,13 @@ BEGIN
     v_holes_geom := ST_Difference(v_slo_meja, v_union_geom);
 
     -- Clear existing holes for this version
-    DELETE FROM md_topoloske_kontrole
+    DELETE FROM md_topoloske_kontrole_obm
     WHERE area_type = 'obm' and id_rel_geo_verzija = p_id_rel_geo_verzija and topology_problem_type = 'hole';
 
     -- Insert new holes if they exist
     IF v_holes_geom IS NOT NULL AND NOT ST_IsEmpty(v_holes_geom) THEN
         -- Handle multipolygon case - insert each polygon separately
-       INSERT INTO md_topoloske_kontrole (created_at, id, created_by, area_type, id_rel_geo_verzija, topology_problem_type, geom, perimeter, area, compactness)
+       INSERT INTO md_topoloske_kontrole_obm (created_at, id, created_by, area_type, id_rel_geo_verzija, topology_problem_type, geom, perimeter, area, compactness)
         SELECT
             now()::timestamp,
             uuid_generate_v4(),
@@ -106,7 +106,7 @@ BEGIN
         RAISE EXCEPTION 'Slovenia boundary (slo_meja) not found';
     END IF;
 
-    DELETE FROM md_topoloske_kontrole
+    DELETE FROM md_topoloske_kontrole_obm
     WHERE area_type = 'obm' and id_rel_geo_verzija = p_id_rel_geo_verzija and topology_problem_type = 'overflow';    -- Mark entries that overflow Slovenia boundary
 
 
@@ -151,7 +151,7 @@ BEGIN
 --         ) t
 --     );
 
-    INSERT INTO md_topoloske_kontrole ( id, created_at, created_by, area_type, id_rel_geo_verzija, topology_problem_type, id1, geom, perimeter, area, compactness)
+    INSERT INTO md_topoloske_kontrole_obm ( id, created_at, created_by, area_type, id_rel_geo_verzija, topology_problem_type, id1, geom, perimeter, area, compactness)
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
@@ -206,7 +206,7 @@ BEGIN
     -- ========================================================================
     -- Reset all existing intersections
 
-    DELETE FROM md_topoloske_kontrole
+    DELETE FROM md_topoloske_kontrole_obm
     WHERE area_type = 'obm' and id_rel_geo_verzija = p_id_rel_geo_verzija and topology_problem_type = 'intersection';
 
 
@@ -235,7 +235,7 @@ BEGIN
       AND ST_Intersects(a.geom, b.geom)
       AND NOT ST_Touches(a.geom, b.geom);
 
-    INSERT INTO md_topoloske_kontrole ( id, created_at, created_by, area_type, id_rel_geo_verzija, topology_problem_type, id1, id2, geom, perimeter, area, compactness)
+    INSERT INTO md_topoloske_kontrole_obm ( id, created_at, created_by, area_type, id_rel_geo_verzija, topology_problem_type, id1, id2, geom, perimeter, area, compactness)
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
