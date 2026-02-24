@@ -16,6 +16,24 @@
 -- ============================================================================
 
 
+
+-- ============================================================================
+-- STEP 0: You can run all of of this easily: just paste this into playground and run it.
+-- ============================================================================
+
+--     Possibly uncomment the part in this script about 2_decimal_places
+--     (btw: its nice that in this script we drop the triggers beforehand, so things are quicker)
+--
+-- \i /Users/matevzvidovic/GeomIntegrity/Main/00setup.sql
+--
+-- \i /Users/matevzvidovic/GeomIntegrity/Main/98load_all_functions.sql
+--
+-- SELECT * FROM validate_all_topologies();
+
+-- SELECT * FROM validate_all_hierarchies();
+
+
+
 -- ============================================================================
 -- STEP 1: Create OBM topology controls table (if not exists)
 -- ============================================================================
@@ -134,6 +152,8 @@ BEGIN
         CHECK (id2 IS NULL OR (id1 IS NOT NULL AND id1 < id2));
     END IF;
 END $$;
+
+
 
 
 -- ============================================================================

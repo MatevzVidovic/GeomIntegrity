@@ -8,9 +8,6 @@
     <file url="file://$PROJECT_DIR$/Main/1make2decimalPlaces.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/Main/3checkAllTopologies.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/Main/5trigger.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/files/topology_trigger.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/localdb_main.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/main.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/obmocja_reset.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/playground.sql" dialect="PostgreSQL" />
   </component>
 </project>

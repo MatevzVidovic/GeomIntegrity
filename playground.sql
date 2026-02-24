@@ -3,6 +3,13 @@
 
 
 
+\i /Users/matevzvidovic/GeomIntegrity/Main/98load_all_functions.sql
+
+SELECT * FROM validate_all_topologies();
+
+SELECT * FROM validate_all_hierarchies();
+
+
 
 -- 1make2decimalPlaces
 
