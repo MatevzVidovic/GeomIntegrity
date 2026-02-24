@@ -36,7 +36,7 @@ FROM md_geo_obm;
 
 
 
-CREATE INDEX idx_topoloske_kontrole ON md_topoloske_kontrole (area_type, id_rel_geo_verzija, topology_problem_type, id1, id2);
+CREATE INDEX idx_topoloske_kontrole ON md_topoloske_kontrole (area_type, id_rel_geo_verzija, id_rel_verzije_modela, topology_problem_type, id1, id2);
 
 ALTER TABLE md_topoloske_kontrole
 ADD CONSTRAINT check_area_type
@@ -49,8 +49,7 @@ CHECK (topology_problem_type IN ('intersection', 'hole', 'overflow'));
 -- Allow NULL but enforce constraint when both are present
 ALTER TABLE md_topoloske_kontrole
 ADD CONSTRAINT check_id1_less_than_id2
-
-
+CHECK (id2 IS NULL OR (id1 IS NOT NULL AND id1 < id2));
 
 
 
