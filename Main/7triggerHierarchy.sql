@@ -38,12 +38,26 @@ BEGIN
     -- PHASE 1: HANDLE REMOVAL (DELETE or UPDATE)
     -- ========================================================================
     IF (TG_OP = 'DELETE' OR TG_OP = 'UPDATE') THEN
-        -- Get the geo version from OBMs linked to this cona
-        SELECT DISTINCT obm.id_rel_geo_verzija INTO v_id_rel_geo_verzija
-        FROM md_geo_obm obm
-        JOIN md_geo_obmxcona xc ON xc.id_rel_geo_obm = obm.id
-        WHERE xc.id_rel_geo_cona = OLD.id_rel_geo_cona
-        LIMIT 1;
+        -- Get the geo version from the OBM being unlinked (this always works)
+        SELECT id_rel_geo_verzija INTO v_id_rel_geo_verzija
+        FROM md_geo_obm
+        WHERE id = OLD.id_rel_geo_obm;
+
+        -- If OBM doesn't exist, try to get version from other OBMs linked to same cona
+        IF v_id_rel_geo_verzija IS NULL THEN
+            SELECT DISTINCT obm.id_rel_geo_verzija INTO v_id_rel_geo_verzija
+            FROM md_geo_obm obm
+            JOIN md_geo_obmxcona xc ON xc.id_rel_geo_obm = obm.id
+            WHERE xc.id_rel_geo_cona = OLD.id_rel_geo_cona
+            LIMIT 1;
+        END IF;
+
+        -- If still NULL, try to get from cona's model version
+        IF v_id_rel_geo_verzija IS NULL THEN
+            SELECT c.id_rel_verzije_modeli INTO v_id_rel_geo_verzija
+            FROM md_geo_cona c
+            WHERE c.id = OLD.id_rel_geo_cona;
+        END IF;
 
         IF v_id_rel_geo_verzija IS NOT NULL THEN
             -- Remove any existing problems related to this link
@@ -84,11 +98,11 @@ BEGIN
                 END IF;
             END IF;
 
-            -- Check if the cona is now empty
+            -- Check if the cona is now empty (no more links to this cona)
             IF NOT EXISTS (
                 SELECT 1 FROM md_geo_obmxcona xc
                 WHERE xc.id_rel_geo_cona = OLD.id_rel_geo_cona
-                  AND (TG_OP = 'DELETE' OR xc.id_rel_geo_obm != OLD.id_rel_geo_obm)
+                  AND xc.id != OLD.id  -- exclude the row being deleted
             ) THEN
                 INSERT INTO md_topoloske_kontrole_hierarhija (
                     id, created_at, created_by, id_rel_geo_verzija,
@@ -369,6 +383,11 @@ BEGIN
     WHERE c.id_rel_geo_lao = COALESCE(NEW.id, OLD.id)
     LIMIT 1;
 
+    -- If still NULL, try to get from LAO's model version
+    IF v_id_rel_geo_verzija IS NULL THEN
+        v_id_rel_geo_verzija := COALESCE(NEW.id_rel_verzije_modeli, OLD.id_rel_verzije_modeli);
+    END IF;
+
     -- ========================================================================
     -- PHASE 1: HANDLE REMOVAL (DELETE or UPDATE of id_rel_geo_tao)
     -- ========================================================================
@@ -406,6 +425,42 @@ BEGIN
                         AND tip_problema = 'empty_tao'
                   );
             END IF;
+        END IF;
+
+        -- When LAO is DELETED, check if any conas reference it (orphan_lao_ref)
+        IF TG_OP = 'DELETE' THEN
+            INSERT INTO md_topoloske_kontrole_hierarhija (
+                id, created_at, created_by, id_rel_geo_verzija,
+                tip_entitete, tip_problema, problematicen_id
+            )
+            SELECT
+                uuid_generate_v4(),
+                now()::timestamp,
+                '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+                -- Get version from OBMs with same model version, or fall back to model version
+                COALESCE(
+                    (SELECT DISTINCT obm.id_rel_geo_verzija
+                     FROM md_geo_obm obm
+                     WHERE obm.id_rel_geo_verzija = c.id_rel_verzije_modeli
+                     LIMIT 1),
+                    (SELECT DISTINCT obm.id_rel_geo_verzija
+                     FROM md_geo_obm obm
+                     JOIN md_geo_obmxcona xc ON xc.id_rel_geo_obm = obm.id
+                     JOIN md_geo_cona c2 ON xc.id_rel_geo_cona = c2.id
+                     WHERE c2.id_rel_verzije_modeli = c.id_rel_verzije_modeli
+                     LIMIT 1),
+                    c.id_rel_verzije_modeli
+                ),
+                'lao',
+                'orphan_lao_ref_in_cona',
+                c.id
+            FROM md_geo_cona c
+            WHERE c.id_rel_geo_lao = OLD.id
+              AND NOT EXISTS (
+                  SELECT 1 FROM md_topoloske_kontrole_hierarhija
+                  WHERE problematicen_id = c.id
+                    AND tip_problema = 'orphan_lao_ref_in_cona'
+              );
         END IF;
     END IF;
 
