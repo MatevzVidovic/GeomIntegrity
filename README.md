@@ -61,7 +61,7 @@ Then for all overflows, you see which entries intersect with them and mark them 
 INSERT INTO slo_meja(id, created_at, created_by, geom)
 SELECT uuid_generate_v4() AS id,
        now()::timestamp,
-       '848956e8-d73e-11f0-9ff0-02420a000f64',
+       '00000000-0000-0000-0000-000000000000',
        ST_MakePolygon(ST_ExteriorRing(
            ST_ReducePrecision(
                ST_Union(md_geo_obm.geom), 

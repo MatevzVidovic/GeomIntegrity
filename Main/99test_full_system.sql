@@ -45,7 +45,7 @@ INSERT INTO slo_meja(id, created_at, created_by, geom)
 VALUES (
     uuid_generate_v4(),
     now()::timestamp,
-    '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+    '00000000-0000-0000-0000-000000000000'::uuid,
     ST_GeomFromText('POLYGON((0 0, 3 0, 3 3, 0 3, 0 0))', 3794)
 );
 
@@ -109,41 +109,41 @@ END $$;
 INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
 VALUES
     -- Bottom row (y: 0-1)
-    ((SELECT value FROM test_ids WHERE key='obm1'), now(), '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+    ((SELECT value FROM test_ids WHERE key='obm1'), now(), '00000000-0000-0000-0000-000000000000'::uuid,
      (SELECT value FROM test_ids WHERE key='version'), 'OBM_1_bottom_left',
      ST_GeomFromText('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))', 3794)),
 
-    ((SELECT value FROM test_ids WHERE key='obm2'), now(), '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+    ((SELECT value FROM test_ids WHERE key='obm2'), now(), '00000000-0000-0000-0000-000000000000'::uuid,
      (SELECT value FROM test_ids WHERE key='version'), 'OBM_2_bottom_mid',
      ST_GeomFromText('POLYGON((1 0, 2 0, 2 1, 1 1, 1 0))', 3794)),
 
-    ((SELECT value FROM test_ids WHERE key='obm3'), now(), '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+    ((SELECT value FROM test_ids WHERE key='obm3'), now(), '00000000-0000-0000-0000-000000000000'::uuid,
      (SELECT value FROM test_ids WHERE key='version'), 'OBM_3_bottom_right',
      ST_GeomFromText('POLYGON((2 0, 3 0, 3 1, 2 1, 2 0))', 3794)),
 
     -- Middle row (y: 1-2)
-    ((SELECT value FROM test_ids WHERE key='obm4'), now(), '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+    ((SELECT value FROM test_ids WHERE key='obm4'), now(), '00000000-0000-0000-0000-000000000000'::uuid,
      (SELECT value FROM test_ids WHERE key='version'), 'OBM_4_middle_left',
      ST_GeomFromText('POLYGON((0 1, 1 1, 1 2, 0 2, 0 1))', 3794)),
 
-    ((SELECT value FROM test_ids WHERE key='obm5'), now(), '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+    ((SELECT value FROM test_ids WHERE key='obm5'), now(), '00000000-0000-0000-0000-000000000000'::uuid,
      (SELECT value FROM test_ids WHERE key='version'), 'OBM_5_middle_mid',
      ST_GeomFromText('POLYGON((1 1, 2 1, 2 2, 1 2, 1 1))', 3794)),
 
-    ((SELECT value FROM test_ids WHERE key='obm6'), now(), '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+    ((SELECT value FROM test_ids WHERE key='obm6'), now(), '00000000-0000-0000-0000-000000000000'::uuid,
      (SELECT value FROM test_ids WHERE key='version'), 'OBM_6_middle_right',
      ST_GeomFromText('POLYGON((2 1, 3 1, 3 2, 2 2, 2 1))', 3794)),
 
     -- Top row (y: 2-3)
-    ((SELECT value FROM test_ids WHERE key='obm7'), now(), '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+    ((SELECT value FROM test_ids WHERE key='obm7'), now(), '00000000-0000-0000-0000-000000000000'::uuid,
      (SELECT value FROM test_ids WHERE key='version'), 'OBM_7_top_left',
      ST_GeomFromText('POLYGON((0 2, 1 2, 1 3, 0 3, 0 2))', 3794)),
 
-    ((SELECT value FROM test_ids WHERE key='obm8'), now(), '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+    ((SELECT value FROM test_ids WHERE key='obm8'), now(), '00000000-0000-0000-0000-000000000000'::uuid,
      (SELECT value FROM test_ids WHERE key='version'), 'OBM_8_top_mid',
      ST_GeomFromText('POLYGON((1 2, 2 2, 2 3, 1 3, 1 2))', 3794)),
 
-    ((SELECT value FROM test_ids WHERE key='obm9'), now(), '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+    ((SELECT value FROM test_ids WHERE key='obm9'), now(), '00000000-0000-0000-0000-000000000000'::uuid,
      (SELECT value FROM test_ids WHERE key='version'), 'OBM_9_top_right',
      ST_GeomFromText('POLYGON((2 2, 3 2, 3 3, 2 3, 2 2))', 3794));
 
@@ -163,19 +163,19 @@ VALUES
 -- Create TAO
 INSERT INTO md_geo_tao (id, created_at, created_by, id_rel_verzije_modeli, id_tao, drugi_tao)
 VALUES ((SELECT value FROM test_ids WHERE key='tao'),
-        now()::timestamp, '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+        now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid,
         (SELECT value FROM test_ids WHERE key='model'), 1, false);
 
 -- Create 2 LAOs
 INSERT INTO md_geo_lao (id, created_at, created_by, id_rel_geo_tao, id_rel_verzije_modeli, id_lao, ime_lao, drugi_lao)
 VALUES
     ((SELECT value FROM test_ids WHERE key='lao1'),
-     now()::timestamp, '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+     now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid,
      (SELECT value FROM test_ids WHERE key='tao'),
      (SELECT value FROM test_ids WHERE key='model'), 1, 'LAO_BottomMiddle', false),
 
     ((SELECT value FROM test_ids WHERE key='lao2'),
-     now()::timestamp, '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+     now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid,
      (SELECT value FROM test_ids WHERE key='tao'),
      (SELECT value FROM test_ids WHERE key='model'), 2, 'LAO_Top', false);
 
@@ -183,17 +183,17 @@ VALUES
 INSERT INTO md_geo_cona (id, created_at, created_by, id_rel_geo_lao, id_rel_verzije_modeli, ime_cone)
 VALUES
     ((SELECT value FROM test_ids WHERE key='cona1'),
-     now()::timestamp, '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+     now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid,
      (SELECT value FROM test_ids WHERE key='lao1'),
      (SELECT value FROM test_ids WHERE key='model'), 'Cona_BottomRow'),
 
     ((SELECT value FROM test_ids WHERE key='cona2'),
-     now()::timestamp, '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+     now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid,
      (SELECT value FROM test_ids WHERE key='lao1'),
      (SELECT value FROM test_ids WHERE key='model'), 'Cona_MiddleRow'),
 
     ((SELECT value FROM test_ids WHERE key='cona3'),
-     now()::timestamp, '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+     now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid,
      (SELECT value FROM test_ids WHERE key='lao2'),
      (SELECT value FROM test_ids WHERE key='model'), 'Cona_TopRow');
 
@@ -211,7 +211,7 @@ INSERT INTO md_geo_obmxcona (id, created_at, created_by, id_rel_geo_obm, id_rel_
 SELECT
     uuid_generate_v4(),
     now()::timestamp,
-    '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+    '00000000-0000-0000-0000-000000000000'::uuid,
     (SELECT value FROM test_ids WHERE key='obm' || i),
     (SELECT value FROM test_ids WHERE key='cona1')
 FROM generate_series(1, 3) i;
@@ -221,7 +221,7 @@ INSERT INTO md_geo_obmxcona (id, created_at, created_by, id_rel_geo_obm, id_rel_
 SELECT
     uuid_generate_v4(),
     now()::timestamp,
-    '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+    '00000000-0000-0000-0000-000000000000'::uuid,
     (SELECT value FROM test_ids WHERE key='obm' || i),
     (SELECT value FROM test_ids WHERE key='cona2')
 FROM generate_series(4, 6) i;
@@ -231,7 +231,7 @@ INSERT INTO md_geo_obmxcona (id, created_at, created_by, id_rel_geo_obm, id_rel_
 SELECT
     uuid_generate_v4(),
     now()::timestamp,
-    '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+    '00000000-0000-0000-0000-000000000000'::uuid,
     (SELECT value FROM test_ids WHERE key='obm' || i),
     (SELECT value FROM test_ids WHERE key='cona3')
 FROM generate_series(7, 9) i;

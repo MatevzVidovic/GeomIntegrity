@@ -63,7 +63,7 @@ BEGIN
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+        '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_geo_verzija,
         'cona',
         'missing_obm_in_cona',
@@ -85,7 +85,7 @@ BEGIN
     SELECT DISTINCT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+        '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_geo_verzija,
         'cona',
         'orphan_obm_ref',
@@ -113,7 +113,7 @@ BEGIN
     SELECT DISTINCT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+        '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_geo_verzija,
         'cona',
         'orphan_cona_ref',
@@ -135,7 +135,7 @@ BEGIN
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+        '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_geo_verzija,
         'cona',
         'empty_cona',
@@ -202,7 +202,7 @@ BEGIN
     SELECT DISTINCT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+        '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_geo_verzija,
         'lao',
         'missing_cona_in_lao',
@@ -222,7 +222,7 @@ BEGIN
     SELECT DISTINCT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+        '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_geo_verzija,
         'lao',
         'orphan_lao_ref_in_cona',
@@ -246,7 +246,7 @@ BEGIN
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+        '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_geo_verzija,
         'lao',
         'empty_lao',
@@ -316,7 +316,7 @@ BEGIN
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+        '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_geo_verzija,
         'tao',
         'missing_lao_in_tao',
@@ -334,7 +334,7 @@ BEGIN
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+        '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_geo_verzija,
         'tao',
         'orphan_tao_ref_in_lao',
@@ -356,7 +356,7 @@ BEGIN
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64'::uuid,
+        '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_geo_verzija,
         'tao',
         'empty_tao',

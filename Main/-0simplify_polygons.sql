@@ -41,7 +41,7 @@ BEGIN
 SELECT
     uuid_generate_v4(),
                     now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64',
+        '00000000-0000-0000-0000-000000000000',
 --     ST_MakeValid(
 --     ST_SimplifyVW(geom, 100.0)
 --         ),                           -- geom

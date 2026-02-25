@@ -32,11 +32,6 @@
 
 -- \i /Users/matevzvidovic/GeomIntegrity/Main/99test_full_system.sql
 --
--- SELECT * FROM validate_all_topologies();
---
--- SELECT * FROM validate_all_hierarchies();
---
-
 
 -- ============================================================================
 -- STEP 1: Create OBM topology controls table (if not exists)
@@ -95,7 +90,7 @@ INSERT INTO slo_meja(id, created_at, created_by, geom)
 SELECT
     uuid_generate_v4() AS id,
     now()::timestamp,
-    '848956e8-d73e-11f0-9ff0-02420a000f64',
+    '00000000-0000-0000-0000-000000000000',
     ST_MakePolygon(ST_ExteriorRing(
         ST_ReducePrecision(
             ST_Union(md_geo_obm.geom),
@@ -169,7 +164,7 @@ END $$;
 -- SELECT * FROM validate_all('your-uuid-here');
 
 -- For all model versions:
--- SELECT * FROM validate_all_topologies();
+SELECT * FROM validate_all_topologies();
 
 
 -- ============================================================================
@@ -250,7 +245,7 @@ END $$;
 -- SELECT * FROM validate_all_hierarchy('your-uuid-here');
 
 -- For all model versions:
--- SELECT * FROM validate_all_hierarchies();
+SELECT * FROM validate_all_hierarchies();
 
 
 -- ============================================================================
@@ -289,13 +284,3 @@ END $$;
 -- For all model versions:
 --   SELECT * FROM validate_all_hierarchies();
 
-
--- ============================================================================
--- Manual fixing functions (use with extreme caution):
--- ============================================================================
--- These functions attempt to automatically fix topology issues.
--- They should only be used after careful review of the problems.
-
--- SELECT * FROM fix_holes();
--- SELECT * FROM fix_overflows();
--- SELECT * FROM fix_intersections();

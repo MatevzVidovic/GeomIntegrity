@@ -438,7 +438,7 @@ BEGIN
         SELECT
             now()::timestamp,
             uuid_generate_v4(),
-            '848956e8-d73e-11f0-9ff0-02420a000f64',
+            '00000000-0000-0000-0000-000000000000',
             'obm',
             p_id_rel_geo_verzija,
             'hole',
@@ -553,7 +553,7 @@ BEGIN
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64',
+        '00000000-0000-0000-0000-000000000000',
         'obm',
         p_id_rel_geo_verzija,
         'overflow',
@@ -662,7 +662,7 @@ BEGIN
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
-        '848956e8-d73e-11f0-9ff0-02420a000f64',
+        '00000000-0000-0000-0000-000000000000',
         'obm',
         p_id_rel_geo_verzija,
         'intersection',
