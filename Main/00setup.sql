@@ -27,7 +27,7 @@
 --     (btw: its nice that in this script we drop the triggers beforehand, so things are quicker)
 --
 -- \i /Users/matevzvidovic/GeomIntegrity/Main/00setup.sql
---
+
 -- \i /Users/matevzvidovic/GeomIntegrity/Main/98load_all_functions.sql
 
 -- \i /Users/matevzvidovic/GeomIntegrity/Main/99test_full_system.sql
