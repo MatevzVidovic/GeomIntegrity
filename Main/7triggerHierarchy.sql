@@ -7,9 +7,13 @@
 -- Unlike OBM validation (which is geometric), these are purely ID-based checks
 -- that fire when relationships change.
 --
--- Each trigger simply determines the affected geo version and calls
--- validate_all_hierarchy() for a full recheck. This is correct and
+-- Each trigger determines the affected model version (id_rel_verzije_modeli)
+-- and calls validate_all_hierarchy() for a full recheck. This is correct and
 -- maintainable because the hierarchy tables are small.
+--
+-- Cona and LAO rows carry id_rel_verzije_modeli directly, so no joins are
+-- needed in those triggers. Only the obmxcona trigger needs a join to get
+-- the model version from the cona.
 -- ============================================================================
 
 
@@ -22,7 +26,7 @@ DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao;
 -- TRIGGER FUNCTION: validate_obmxcona_incremental
 -- ============================================================================
 -- Fires on INSERT/UPDATE/DELETE of md_geo_obmxcona.
--- Gets the geo version from the affected OBM, then reruns full validation.
+-- Gets the model version from the affected cona, then reruns full validation.
 
 DROP FUNCTION IF EXISTS validate_obmxcona_incremental();
 
@@ -31,17 +35,17 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_id_rel_geo_verzija UUID;
-    v_obm_id UUID;
+    v_id_rel_verzije_modeli UUID;
+    v_cona_id UUID;
 BEGIN
-    v_obm_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.id_rel_geo_obm ELSE NEW.id_rel_geo_obm END;
+    v_cona_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.id_rel_geo_cona ELSE NEW.id_rel_geo_cona END;
 
-    SELECT id_rel_geo_verzija INTO v_id_rel_geo_verzija
-    FROM md_geo_obm
-    WHERE id = v_obm_id;
+    SELECT id_rel_verzije_modeli INTO v_id_rel_verzije_modeli
+    FROM md_geo_cona
+    WHERE id = v_cona_id;
 
-    IF v_id_rel_geo_verzija IS NOT NULL THEN
-        PERFORM validate_all_hierarchy(v_id_rel_geo_verzija);
+    IF v_id_rel_verzije_modeli IS NOT NULL THEN
+        PERFORM validate_all_hierarchy(v_id_rel_verzije_modeli);
     END IF;
 
     IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
@@ -62,7 +66,7 @@ CREATE TRIGGER trg_validate_obmxcona_incremental
 -- TRIGGER FUNCTION: validate_cona_lao_incremental
 -- ============================================================================
 -- Fires on INSERT/UPDATE/DELETE of md_geo_cona (when id_rel_geo_lao changes).
--- Gets the geo version from OBMs linked to this cona, then reruns full validation.
+-- Cona carries id_rel_verzije_modeli directly — no joins needed.
 
 DROP FUNCTION IF EXISTS validate_cona_lao_incremental();
 
@@ -71,19 +75,12 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_id_rel_geo_verzija UUID;
-    v_cona_id UUID;
+    v_id_rel_verzije_modeli UUID;
 BEGIN
-    v_cona_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.id ELSE NEW.id END;
+    v_id_rel_verzije_modeli := CASE WHEN TG_OP = 'DELETE' THEN OLD.id_rel_verzije_modeli ELSE NEW.id_rel_verzije_modeli END;
 
-    SELECT DISTINCT obm.id_rel_geo_verzija INTO v_id_rel_geo_verzija
-    FROM md_geo_obm obm
-    JOIN md_geo_obmxcona xc ON xc.id_rel_geo_obm = obm.id
-    WHERE xc.id_rel_geo_cona = v_cona_id
-    LIMIT 1;
-
-    IF v_id_rel_geo_verzija IS NOT NULL THEN
-        PERFORM validate_all_hierarchy(v_id_rel_geo_verzija);
+    IF v_id_rel_verzije_modeli IS NOT NULL THEN
+        PERFORM validate_all_hierarchy(v_id_rel_verzije_modeli);
     END IF;
 
     IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
@@ -104,9 +101,7 @@ CREATE TRIGGER trg_validate_cona_lao_incremental
 -- TRIGGER FUNCTION: validate_lao_tao_incremental
 -- ============================================================================
 -- Fires on INSERT/UPDATE/DELETE of md_geo_lao (when id_rel_geo_tao changes).
--- Gets the geo version from OBMs linked through conas in this LAO.
--- Falls back to the model version ID if no OBMs are reachable
--- (e.g. all conas under this LAO are empty).
+-- LAO carries id_rel_verzije_modeli directly — no joins or fallbacks needed.
 
 DROP FUNCTION IF EXISTS validate_lao_tao_incremental();
 
@@ -115,25 +110,12 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_id_rel_geo_verzija UUID;
-    v_lao_id UUID;
+    v_id_rel_verzije_modeli UUID;
 BEGIN
-    v_lao_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.id ELSE NEW.id END;
+    v_id_rel_verzije_modeli := CASE WHEN TG_OP = 'DELETE' THEN OLD.id_rel_verzije_modeli ELSE NEW.id_rel_verzije_modeli END;
 
-    SELECT DISTINCT obm.id_rel_geo_verzija INTO v_id_rel_geo_verzija
-    FROM md_geo_obm obm
-    JOIN md_geo_obmxcona xc ON xc.id_rel_geo_obm = obm.id
-    JOIN md_geo_cona c ON xc.id_rel_geo_cona = c.id
-    WHERE c.id_rel_geo_lao = v_lao_id
-    LIMIT 1;
-
-    -- Fallback: if no OBMs reachable (conas are empty), use model version
-    IF v_id_rel_geo_verzija IS NULL THEN
-        v_id_rel_geo_verzija := CASE WHEN TG_OP = 'DELETE' THEN OLD.id_rel_verzije_modeli ELSE NEW.id_rel_verzije_modeli END;
-    END IF;
-
-    IF v_id_rel_geo_verzija IS NOT NULL THEN
-        PERFORM validate_all_hierarchy(v_id_rel_geo_verzija);
+    IF v_id_rel_verzije_modeli IS NOT NULL THEN
+        PERFORM validate_all_hierarchy(v_id_rel_verzije_modeli);
     END IF;
 
     IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;

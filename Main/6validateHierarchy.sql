@@ -8,8 +8,14 @@
 --
 -- These are ID-based checks, not geometric operations.
 --
--- IMPORTANT: md_geo_cona does NOT have id_rel_geo_verzija!
--- We get the version from OBMs (which have id_rel_geo_verzija).
+-- Scoping: all hierarchy validation is per id_rel_verzije_modeli (model version).
+-- The OBM version (id_rel_geo_verzija) is derived via:
+--   md_verzije_modeli.id_rel_geo_verzija
+-- Multiple model versions can share the same OBM version, so model version
+-- is the correct discriminator for hierarchy checks.
+--
+-- Results are stored in md_topoloske_kontrole_hierarhija using the
+-- id_rel_verzije_modeli field as the version discriminator.
 --
 -- Problem types:
 --   - 'missing_obm_in_cona': An OBM exists but is not assigned to any cona
@@ -35,7 +41,7 @@
 
 DROP FUNCTION IF EXISTS validate_cona_hierarchy(uuid);
 
-CREATE OR REPLACE FUNCTION validate_cona_hierarchy(p_id_rel_geo_verzija uuid)
+CREATE OR REPLACE FUNCTION validate_cona_hierarchy(p_id_rel_verzije_modeli uuid)
 RETURNS TABLE(
     missing_obms INTEGER,
     orphan_obm_refs INTEGER,
@@ -49,27 +55,38 @@ DECLARE
     v_orphan_obm_refs INTEGER := 0;
     v_orphan_cona_refs INTEGER := 0;
     v_empty_conas INTEGER := 0;
+    v_id_rel_geo_verzija UUID;
 BEGIN
-    -- Clear existing cona problems for this version
+    -- Get the OBM version for this model version
+    SELECT id_rel_geo_verzija INTO v_id_rel_geo_verzija
+    FROM md_verzije_modeli
+    WHERE id = p_id_rel_verzije_modeli;
+
+    IF v_id_rel_geo_verzija IS NULL THEN
+        RETURN QUERY SELECT 0, 0, 0, 0;
+        RETURN;
+    END IF;
+
+    -- Clear existing cona problems for this model version
     DELETE FROM md_topoloske_kontrole_hierarhija
-    WHERE id_rel_geo_verzija = p_id_rel_geo_verzija
+    WHERE id_rel_verzije_modeli = p_id_rel_verzije_modeli
       AND tip_entitete = 'cona';
 
     -- 1. Find OBMs not assigned to any cona
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_geo_verzija,
+        id, created_at, created_by, id_rel_verzije_modeli,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
-        p_id_rel_geo_verzija,
+        p_id_rel_verzije_modeli,
         'cona',
         'missing_obm_in_cona',
         obm.id
     FROM md_geo_obm obm
-    WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
+    WHERE obm.id_rel_geo_verzija = v_id_rel_geo_verzija
       AND NOT EXISTS (
           SELECT 1 FROM md_geo_obmxcona xc
           WHERE xc.id_rel_geo_obm = obm.id
@@ -77,76 +94,67 @@ BEGIN
     GET DIAGNOSTICS v_missing_obms = ROW_COUNT;
 
     -- 2. Find obmxcona entries referencing non-existent OBMs
-    -- (for OBMs in this version's conas)
+    --    (scoped to conas belonging to this model version)
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_geo_verzija,
+        id, created_at, created_by, id_rel_verzije_modeli,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT DISTINCT
         uuid_generate_v4(),
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
-        p_id_rel_geo_verzija,
+        p_id_rel_verzije_modeli,
         'cona',
         'orphan_obm_ref',
         xc.id_rel_geo_obm
     FROM md_geo_obmxcona xc
-    WHERE NOT EXISTS (
+    JOIN md_geo_cona c ON xc.id_rel_geo_cona = c.id
+    WHERE c.id_rel_verzije_modeli = p_id_rel_verzije_modeli
+      AND NOT EXISTS (
           SELECT 1 FROM md_geo_obm obm
           WHERE obm.id = xc.id_rel_geo_obm
-            AND obm.id_rel_geo_verzija = p_id_rel_geo_verzija
-      )
-      -- Only check for conas linked to OBMs in this version
-      AND EXISTS (
-          SELECT 1 FROM md_geo_obmxcona xc2
-          JOIN md_geo_obm obm2 ON xc2.id_rel_geo_obm = obm2.id
-          WHERE xc2.id_rel_geo_cona = xc.id_rel_geo_cona
-            AND obm2.id_rel_geo_verzija = p_id_rel_geo_verzija
+            AND obm.id_rel_geo_verzija = v_id_rel_geo_verzija
       );
     GET DIAGNOSTICS v_orphan_obm_refs = ROW_COUNT;
 
     -- 3. Find obmxcona entries referencing non-existent conas
+    --    (scoped via OBMs belonging to this version)
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_geo_verzija,
+        id, created_at, created_by, id_rel_verzije_modeli,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT DISTINCT
         uuid_generate_v4(),
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
-        p_id_rel_geo_verzija,
+        p_id_rel_verzije_modeli,
         'cona',
         'orphan_cona_ref',
         xc.id_rel_geo_cona
     FROM md_geo_obmxcona xc
     JOIN md_geo_obm obm ON xc.id_rel_geo_obm = obm.id
-    WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
+    WHERE obm.id_rel_geo_verzija = v_id_rel_geo_verzija
       AND NOT EXISTS (
           SELECT 1 FROM md_geo_cona c
           WHERE c.id = xc.id_rel_geo_cona
       );
     GET DIAGNOSTICS v_orphan_cona_refs = ROW_COUNT;
 
-    -- 4. Find conas with no OBMs (for conas linked to this version)
+    -- 4. Find conas with no OBMs (for this model version)
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_geo_verzija,
+        id, created_at, created_by, id_rel_verzije_modeli,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
-        p_id_rel_geo_verzija,
+        p_id_rel_verzije_modeli,
         'cona',
         'empty_cona',
         c.id
     FROM md_geo_cona c
-    WHERE c.id_rel_verzije_modeli = (
-        SELECT DISTINCT obm.id_rel_geo_verzija
-        FROM md_geo_obm obm
-        WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
-        LIMIT 1
-    )
+    WHERE c.id_rel_verzije_modeli = p_id_rel_verzije_modeli
       AND NOT EXISTS (
           SELECT 1 FROM md_geo_obmxcona xc
           WHERE xc.id_rel_geo_cona = c.id
@@ -162,13 +170,13 @@ $$;
 -- FUNCTION: validate_lao_hierarchy
 -- ============================================================================
 -- Validates that:
--- 1. Every cona for a version is assigned to a lao (via id_rel_geo_lao)
+-- 1. Every cona for a model version is assigned to a lao (via id_rel_geo_lao)
 -- 2. Every lao has at least one cona
 -- 3. All lao references in conas are valid
 
 DROP FUNCTION IF EXISTS validate_lao_hierarchy(uuid);
 
-CREATE OR REPLACE FUNCTION validate_lao_hierarchy(p_id_rel_geo_verzija uuid)
+CREATE OR REPLACE FUNCTION validate_lao_hierarchy(p_id_rel_verzije_modeli uuid)
 RETURNS TABLE(
     missing_conas INTEGER,
     orphan_lao_refs INTEGER,
@@ -180,57 +188,45 @@ DECLARE
     v_missing_conas INTEGER := 0;
     v_orphan_lao_refs INTEGER := 0;
     v_empty_laos INTEGER := 0;
-    v_id_rel_verzije_modeli UUID;
 BEGIN
-    -- Get the model version from OBMs
-    SELECT DISTINCT obm.id_rel_geo_verzija INTO v_id_rel_verzije_modeli
-    FROM md_geo_obm obm
-    WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
-    LIMIT 1;
-
-    -- Clear existing lao problems for this version
+    -- Clear existing lao problems for this model version
     DELETE FROM md_topoloske_kontrole_hierarhija
-    WHERE id_rel_geo_verzija = p_id_rel_geo_verzija
+    WHERE id_rel_verzije_modeli = p_id_rel_verzije_modeli
       AND tip_entitete = 'lao';
 
     -- 1. Find conas not assigned to any lao (id_rel_geo_lao IS NULL)
-    -- Only check conas that have OBMs in this version
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_geo_verzija,
+        id, created_at, created_by, id_rel_verzije_modeli,
         tip_entitete, tip_problema, problematicen_id
     )
-    SELECT DISTINCT
+    SELECT
         uuid_generate_v4(),
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
-        p_id_rel_geo_verzija,
+        p_id_rel_verzije_modeli,
         'lao',
         'missing_cona_in_lao',
         c.id
     FROM md_geo_cona c
-    JOIN md_geo_obmxcona xc ON xc.id_rel_geo_cona = c.id
-    JOIN md_geo_obm obm ON xc.id_rel_geo_obm = obm.id
-    WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
+    WHERE c.id_rel_verzije_modeli = p_id_rel_verzije_modeli
       AND c.id_rel_geo_lao IS NULL;
     GET DIAGNOSTICS v_missing_conas = ROW_COUNT;
 
     -- 2. Find conas referencing non-existent laos
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_geo_verzija,
+        id, created_at, created_by, id_rel_verzije_modeli,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT DISTINCT
         uuid_generate_v4(),
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
-        p_id_rel_geo_verzija,
+        p_id_rel_verzije_modeli,
         'lao',
         'orphan_lao_ref_in_cona',
         c.id_rel_geo_lao
     FROM md_geo_cona c
-    JOIN md_geo_obmxcona xc ON xc.id_rel_geo_cona = c.id
-    JOIN md_geo_obm obm ON xc.id_rel_geo_obm = obm.id
-    WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
+    WHERE c.id_rel_verzije_modeli = p_id_rel_verzije_modeli
       AND c.id_rel_geo_lao IS NOT NULL
       AND NOT EXISTS (
           SELECT 1 FROM md_geo_lao l
@@ -240,25 +236,23 @@ BEGIN
 
     -- 3. Find laos with no conas (for this model version)
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_geo_verzija,
+        id, created_at, created_by, id_rel_verzije_modeli,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
-        p_id_rel_geo_verzija,
+        p_id_rel_verzije_modeli,
         'lao',
         'empty_lao',
         l.id
     FROM md_geo_lao l
-    WHERE l.id_rel_verzije_modeli = v_id_rel_verzije_modeli
+    WHERE l.id_rel_verzije_modeli = p_id_rel_verzije_modeli
       AND NOT EXISTS (
           SELECT 1 FROM md_geo_cona c
-          JOIN md_geo_obmxcona xc ON xc.id_rel_geo_cona = c.id
-          JOIN md_geo_obm obm ON xc.id_rel_geo_obm = obm.id
           WHERE c.id_rel_geo_lao = l.id
-            AND obm.id_rel_geo_verzija = p_id_rel_geo_verzija
+            AND c.id_rel_verzije_modeli = p_id_rel_verzije_modeli
       );
     GET DIAGNOSTICS v_empty_laos = ROW_COUNT;
 
@@ -277,7 +271,7 @@ $$;
 
 DROP FUNCTION IF EXISTS validate_tao_hierarchy(uuid);
 
-CREATE OR REPLACE FUNCTION validate_tao_hierarchy(p_id_rel_geo_verzija uuid)
+CREATE OR REPLACE FUNCTION validate_tao_hierarchy(p_id_rel_verzije_modeli uuid)
 RETURNS TABLE(
     missing_laos INTEGER,
     orphan_tao_refs INTEGER,
@@ -289,58 +283,45 @@ DECLARE
     v_missing_laos INTEGER := 0;
     v_orphan_tao_refs INTEGER := 0;
     v_empty_taos INTEGER := 0;
-    v_id_rel_verzije_modeli UUID;
 BEGIN
-    -- Get the model version from OBMs
-    SELECT DISTINCT obm.id_rel_geo_verzija INTO v_id_rel_verzije_modeli
-    FROM md_geo_obm obm
-    WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
-    LIMIT 1;
-
-    IF v_id_rel_verzije_modeli IS NULL THEN
-        -- No OBMs for this version, nothing to validate
-        RETURN QUERY SELECT 0, 0, 0;
-        RETURN;
-    END IF;
-
-    -- Clear existing tao problems for this version
+    -- Clear existing tao problems for this model version
     DELETE FROM md_topoloske_kontrole_hierarhija
-    WHERE id_rel_geo_verzija = p_id_rel_geo_verzija
+    WHERE id_rel_verzije_modeli = p_id_rel_verzije_modeli
       AND tip_entitete = 'tao';
 
     -- 1. Find laos not assigned to any tao (id_rel_geo_tao IS NULL)
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_geo_verzija,
+        id, created_at, created_by, id_rel_verzije_modeli,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
-        p_id_rel_geo_verzija,
+        p_id_rel_verzije_modeli,
         'tao',
         'missing_lao_in_tao',
         l.id
     FROM md_geo_lao l
-    WHERE l.id_rel_verzije_modeli = v_id_rel_verzije_modeli
+    WHERE l.id_rel_verzije_modeli = p_id_rel_verzije_modeli
       AND l.id_rel_geo_tao IS NULL;
     GET DIAGNOSTICS v_missing_laos = ROW_COUNT;
 
     -- 2. Find laos referencing non-existent taos
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_geo_verzija,
+        id, created_at, created_by, id_rel_verzije_modeli,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
-        p_id_rel_geo_verzija,
+        p_id_rel_verzije_modeli,
         'tao',
         'orphan_tao_ref_in_lao',
         l.id_rel_geo_tao
     FROM md_geo_lao l
-    WHERE l.id_rel_verzije_modeli = v_id_rel_verzije_modeli
+    WHERE l.id_rel_verzije_modeli = p_id_rel_verzije_modeli
       AND l.id_rel_geo_tao IS NOT NULL
       AND NOT EXISTS (
           SELECT 1 FROM md_geo_tao t
@@ -348,25 +329,25 @@ BEGIN
       );
     GET DIAGNOSTICS v_orphan_tao_refs = ROW_COUNT;
 
-    -- 3. Find taos with no laos
+    -- 3. Find taos with no laos (for this model version)
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_geo_verzija,
+        id, created_at, created_by, id_rel_verzije_modeli,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT
         uuid_generate_v4(),
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
-        p_id_rel_geo_verzija,
+        p_id_rel_verzije_modeli,
         'tao',
         'empty_tao',
         t.id
     FROM md_geo_tao t
-    WHERE t.id_rel_verzije_modeli = v_id_rel_verzije_modeli
+    WHERE t.id_rel_verzije_modeli = p_id_rel_verzije_modeli
       AND NOT EXISTS (
           SELECT 1 FROM md_geo_lao l
           WHERE l.id_rel_geo_tao = t.id
-            AND l.id_rel_verzije_modeli = v_id_rel_verzije_modeli
+            AND l.id_rel_verzije_modeli = p_id_rel_verzije_modeli
       );
     GET DIAGNOSTICS v_empty_taos = ROW_COUNT;
 
@@ -378,13 +359,13 @@ $$;
 -- ============================================================================
 -- FUNCTION: validate_all_hierarchy
 -- ============================================================================
--- Runs all hierarchy validations for a given geo version
+-- Runs all hierarchy validations for a given model version
 
 DROP FUNCTION IF EXISTS validate_all_hierarchy(uuid);
 
-CREATE OR REPLACE FUNCTION validate_all_hierarchy(p_id_rel_geo_verzija uuid)
+CREATE OR REPLACE FUNCTION validate_all_hierarchy(p_id_rel_verzije_modeli uuid)
 RETURNS TABLE(
-    chosen_id_rel_geo_verzija uuid,
+    chosen_id_rel_verzije_modeli uuid,
     cona_missing_obms INTEGER,
     cona_orphan_obm_refs INTEGER,
     cona_orphan_cona_refs INTEGER,
@@ -403,17 +384,12 @@ DECLARE
     v_lao_results RECORD;
     v_tao_results RECORD;
 BEGIN
-    -- Validate cona hierarchy
-    SELECT * INTO v_cona_results FROM validate_cona_hierarchy(p_id_rel_geo_verzija);
-
-    -- Validate lao hierarchy
-    SELECT * INTO v_lao_results FROM validate_lao_hierarchy(p_id_rel_geo_verzija);
-
-    -- Validate tao hierarchy
-    SELECT * INTO v_tao_results FROM validate_tao_hierarchy(p_id_rel_geo_verzija);
+    SELECT * INTO v_cona_results FROM validate_cona_hierarchy(p_id_rel_verzije_modeli);
+    SELECT * INTO v_lao_results FROM validate_lao_hierarchy(p_id_rel_verzije_modeli);
+    SELECT * INTO v_tao_results FROM validate_tao_hierarchy(p_id_rel_verzije_modeli);
 
     RETURN QUERY SELECT
-        p_id_rel_geo_verzija,
+        p_id_rel_verzije_modeli,
         v_cona_results.missing_obms,
         v_cona_results.orphan_obm_refs,
         v_cona_results.orphan_cona_refs,
@@ -431,13 +407,13 @@ $$;
 -- ============================================================================
 -- FUNCTION: validate_all_hierarchies
 -- ============================================================================
--- Runs all hierarchy validations for all geo versions
+-- Runs all hierarchy validations for all model versions
 
 DROP FUNCTION IF EXISTS validate_all_hierarchies();
 
 CREATE OR REPLACE FUNCTION validate_all_hierarchies()
 RETURNS TABLE(
-    chosen_id_rel_geo_verzija uuid,
+    chosen_id_rel_verzije_modeli uuid,
     cona_missing_obms INTEGER,
     cona_orphan_obm_refs INTEGER,
     cona_orphan_cona_refs INTEGER,
@@ -452,17 +428,16 @@ RETURNS TABLE(
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_version uuid;
+    v_model_version uuid;
 BEGIN
-    -- Process each version
-    FOR v_version IN
-        SELECT DISTINCT md_geo_obm.id_rel_geo_verzija
-        FROM md_geo_obm
-        ORDER BY md_geo_obm.id_rel_geo_verzija
+    FOR v_model_version IN
+        SELECT DISTINCT id
+        FROM md_verzije_modeli
+        ORDER BY id
     LOOP
         RETURN QUERY
         SELECT *
-        FROM validate_all_hierarchy(v_version);
+        FROM validate_all_hierarchy(v_model_version);
     END LOOP;
 END;
 $$;

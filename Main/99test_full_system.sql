@@ -97,6 +97,26 @@ BEGIN
     END LOOP;
 END $$;
 
+-- Create test OBM version record (links v_test_version into md_geo_obm_verzije)
+INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
+VALUES (
+    (SELECT value FROM test_ids WHERE key='version'),
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    now()::timestamp,
+    999, false, 'TEST', false
+);
+
+-- Create test model version record (links v_test_model -> v_test_version)
+-- NOTE: if md_verzije_modeli has additional NOT NULL columns, add them here
+INSERT INTO md_verzije_modeli (id, created_by, created_at, id_rel_geo_verzija, model, verzija)
+VALUES (
+    (SELECT value FROM test_ids WHERE key='model'),
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    now()::timestamp,
+    (SELECT value FROM test_ids WHERE key='version'),
+    'TEST', 1
+);
+
 \echo '   Done: Test IDs created'
 
 
@@ -253,7 +273,7 @@ DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao;
 
 -- Run full validation
 SELECT * FROM validate_all((SELECT value FROM test_ids WHERE key='version'));
-SELECT * FROM validate_all_hierarchy((SELECT value FROM test_ids WHERE key='version'));
+SELECT * FROM validate_all_hierarchy((SELECT value FROM test_ids WHERE key='model'));
 
 \echo ''
 \echo '   Expected: 0 problems (perfect grid, perfect hierarchy)'
@@ -280,7 +300,7 @@ WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
 SELECT
     tip_entitete || ' - ' || tip_problema || ': ' || COALESCE(COUNT(*)::TEXT, '0') as result
 FROM md_topoloske_kontrole_hierarhija
-WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
+WHERE id_rel_verzije_modeli = (SELECT value FROM test_ids WHERE key='model')
 GROUP BY tip_entitete, tip_problema
 ORDER BY tip_entitete, tip_problema;
 
@@ -358,7 +378,7 @@ WHERE id_rel_geo_obm = (SELECT value FROM test_ids WHERE key='obm3');
 SELECT
     'Problems found: ' || COUNT(*) || ' (' || STRING_AGG(tip_problema, ', ') || ')' as result
 FROM md_topoloske_kontrole_hierarhija
-WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
+WHERE id_rel_verzije_modeli = (SELECT value FROM test_ids WHERE key='model')
   AND tip_entitete = 'cona';
 
 
@@ -378,7 +398,7 @@ WHERE id_rel_geo_cona = (SELECT value FROM test_ids WHERE key='cona3');
 SELECT
     tip_entitete || ' - ' || tip_problema || ': ' || COUNT(*) as result
 FROM md_topoloske_kontrole_hierarhija
-WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
+WHERE id_rel_verzije_modeli = (SELECT value FROM test_ids WHERE key='model')
 GROUP BY tip_entitete, tip_problema
 ORDER BY tip_entitete, tip_problema;
 
@@ -398,7 +418,7 @@ WHERE id = (SELECT value FROM test_ids WHERE key='lao2');
 SELECT
     tip_problema || ': ' || COUNT(*) as result
 FROM md_topoloske_kontrole_hierarhija
-WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
+WHERE id_rel_verzije_modeli = (SELECT value FROM test_ids WHERE key='model')
   AND tip_entitete = 'lao'
 GROUP BY tip_problema
 ORDER BY tip_problema;
@@ -456,7 +476,7 @@ SELECT
     COUNT(*)::TEXT,
     COUNT(*) >= 1
 FROM md_topoloske_kontrole_hierarhija
-WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
+WHERE id_rel_verzije_modeli = (SELECT value FROM test_ids WHERE key='model')
   AND tip_problema = 'missing_obm_in_cona';
 
 -- Test 6: Empty cona should be detected (Cona3 has no OBMs)
@@ -467,7 +487,7 @@ SELECT
     COUNT(*)::TEXT,
     COUNT(*) = 1
 FROM md_topoloske_kontrole_hierarhija
-WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
+WHERE id_rel_verzije_modeli = (SELECT value FROM test_ids WHERE key='model')
   AND tip_problema = 'empty_cona';
 
 -- Test 7: Orphan LAO reference should be detected (Cona3 references deleted LAO2)
@@ -478,7 +498,7 @@ SELECT
     COUNT(*)::TEXT,
     COUNT(*) >= 1
 FROM md_topoloske_kontrole_hierarhija
-WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
+WHERE id_rel_verzije_modeli = (SELECT value FROM test_ids WHERE key='model')
   AND tip_problema IN ('orphan_lao_ref_in_cona', 'empty_lao');
 
 -- Show all test results
@@ -522,7 +542,7 @@ SELECT
     tip_problema,
     COUNT(*) as count
 FROM md_topoloske_kontrole_hierarhija
-WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
+WHERE id_rel_verzije_modeli = (SELECT value FROM test_ids WHERE key='model')
 GROUP BY tip_entitete, tip_problema
 ORDER BY tip_entitete, tip_problema;
 
