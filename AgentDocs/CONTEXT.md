@@ -113,11 +113,14 @@ Main/
 └── -4checkAllTopologiesWithSimplified.sql - OLD: Validation (deprecated)
 
 ignore_me/                          - Old/unused files
+AgentTests/                         - Comprehensive rollback-safe test suites
+Makefile                            - Includes `make test-agent` command
 
 Note: Files with '-' prefix are deprecated and not loaded by 98load_all_functions.sql
 
 AgentDocs/
 ├── CONTEXT.md                      - This file
+├── AGENT_TESTS_COMPREHENSIVE.md    - Detailed AgentTests coverage + fixes
 ├── FINAL_SCHEMA.md                 - Final table schemas (Slovene names)
 ├── CHANGES_FINAL.md                - Summary of changes made
 ├── 98_LOADER_INFO.md               - Documentation for 98load_all_functions.sql
@@ -133,6 +136,7 @@ AgentDocs/
 - `validate_intersections(uuid)` - Find overlapping obmocja
 - `validate_all(uuid)` - Run all validations for a version
 - `validate_all_topologies()` - Run all validations for all versions
+- `validate_all(uuid)` returns a valid zero-count row for empty versions.
 
 ### Incremental Trigger (5trigger.sql)
 - `validate_topology_incremental()` - Trigger function
@@ -153,6 +157,7 @@ AgentDocs/
 - `validate_obmxcona_incremental()` - Fires on md_geo_obmxcona changes
 - `validate_cona_lao_incremental()` - Fires on md_geo_cona.id_rel_geo_lao changes
 - `validate_lao_tao_incremental()` - Fires on md_geo_lao.id_rel_geo_tao changes
+- `validate_obmxcona_incremental()` revalidates both old and new model versions on UPDATE when they differ.
 
 ## Key Concepts
 
@@ -196,6 +201,13 @@ AgentDocs/
 4. **Test the system**: `\i Main/99test_full_system.sql`
    - Comprehensive test suite
    - Automatically rolls back (safe to run)
+
+5. **Run comprehensive AgentTests suite**:
+   ```bash
+   make test-agent
+   ```
+   - Runs strict assertion-based SQL suites
+   - Rollback-safe (no persistent DB test data)
 
 ### Updating Functions After Changes
 
@@ -244,6 +256,22 @@ PostgreSQL supports **transactional DDL**, which means:
 - ✅ DDL operations (CREATE TABLE, ALTER TABLE, DROP TABLE, CREATE/DROP TRIGGER) - also rollback-able!
 - ✅ TRUNCATE - rollback-able in PostgreSQL
 - ❌ Only non-transactional: DROP/CREATE DATABASE operations
+
+### AgentTests (comprehensive coverage)
+**Purpose**: broad, strict, assertion-based validation of full functions and incremental triggers.
+
+**Suites**:
+- `AgentTests/01_full_validations.sql` - full OBM + hierarchy functions and wrappers
+- `AgentTests/02_topology_trigger_incremental.sql` - OBM incremental trigger paths
+- `AgentTests/03_hierarchy_trigger_incremental.sql` - hierarchy incremental trigger paths
+
+**Runner**:
+- `AgentTests/run_agent_tests.sh` reads DB settings from `db_config/config.py`
+- `make test-agent` executes all suites in order
+- transient connection retries are built in
+
+**Details**:
+- See `AgentDocs/AGENT_TESTS_COMPREHENSIVE.md`.
 
 ## Manual Actions Needed
 

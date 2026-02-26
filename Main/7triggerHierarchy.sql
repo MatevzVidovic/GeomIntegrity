@@ -35,17 +35,28 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_id_rel_verzije_modeli UUID;
-    v_cona_id UUID;
+    v_old_id_rel_verzije_modeli UUID;
+    v_new_id_rel_verzije_modeli UUID;
 BEGIN
-    v_cona_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.id_rel_geo_cona ELSE NEW.id_rel_geo_cona END;
+    IF TG_OP = 'DELETE' OR TG_OP = 'UPDATE' THEN
+        SELECT id_rel_verzije_modeli INTO v_old_id_rel_verzije_modeli
+        FROM md_geo_cona
+        WHERE id = OLD.id_rel_geo_cona;
+    END IF;
 
-    SELECT id_rel_verzije_modeli INTO v_id_rel_verzije_modeli
-    FROM md_geo_cona
-    WHERE id = v_cona_id;
+    IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+        SELECT id_rel_verzije_modeli INTO v_new_id_rel_verzije_modeli
+        FROM md_geo_cona
+        WHERE id = NEW.id_rel_geo_cona;
+    END IF;
 
-    IF v_id_rel_verzije_modeli IS NOT NULL THEN
-        PERFORM validate_all_hierarchy(v_id_rel_verzije_modeli);
+    IF v_old_id_rel_verzije_modeli IS NOT NULL THEN
+        PERFORM validate_all_hierarchy(v_old_id_rel_verzije_modeli);
+    END IF;
+
+    IF v_new_id_rel_verzije_modeli IS NOT NULL
+       AND (v_old_id_rel_verzije_modeli IS NULL OR v_new_id_rel_verzije_modeli <> v_old_id_rel_verzije_modeli) THEN
+        PERFORM validate_all_hierarchy(v_new_id_rel_verzije_modeli);
     END IF;
 
     IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;

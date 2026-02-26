@@ -298,7 +298,7 @@ BEGIN
 
     IF v_total_count = 0 THEN
         RAISE NOTICE 'No entries found for version %', p_id_rel_geo_verzija;
-        RETURN QUERY SELECT 0, 0, 0, 0;
+        RETURN QUERY SELECT p_id_rel_geo_verzija, 0, 0, 0, 0;
         RETURN;
     END IF;
 
@@ -346,5 +346,4 @@ BEGIN
 
 END;
 $$;
-
 

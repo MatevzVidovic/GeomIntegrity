@@ -1,5 +1,29 @@
 # Session Summary - Rollback Integration & Function Loader
 
+## Update: Task 2602 (Comprehensive AgentTests)
+
+Added a second, much broader testing layer in `AgentTests/` with strict assertions and full rollback safety.
+
+Delivered:
+- `AgentTests/01_full_validations.sql`
+- `AgentTests/02_topology_trigger_incremental.sql`
+- `AgentTests/03_hierarchy_trigger_incremental.sql`
+- `AgentTests/run_agent_tests.sh`
+- `Makefile` target: `make test-agent`
+
+Discovered and fixed by tests:
+- `Main/3checkAllTopologies.sql`
+  - `validate_all(uuid)` empty-version return row was corrected.
+- `Main/7triggerHierarchy.sql`
+  - `validate_obmxcona_incremental()` now revalidates both old/new model versions on UPDATE.
+
+Verification:
+- `make test-agent` passes end-to-end.
+- All AgentTests scripts run in transactions and `ROLLBACK`.
+
+Reference:
+- See `AgentDocs/AGENT_TESTS_COMPREHENSIVE.md` for full coverage matrix and execution model.
+
 ## What Was Requested
 
 1. **Integrate rollback into test script** - Make tests automatically roll back
