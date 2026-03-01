@@ -20,7 +20,7 @@
 -- Problem types:
 --   - 'obm. v nobeni coni': An OBM exists but is not assigned to any cona
 --   - 'napačno obm.': obmxcona references an OBM that doesn't exist
---   - 'cone ne obstaja': obmxcona references a cona that doesn't exist
+--   - 'cona ne obstaja': obmxcona references a cona that doesn't exist
 --   - 'cona brez obm.': A cona exists but has no OBMs assigned
 --   - 'cona v nobenem LAO': A cona exists but is not assigned to any lao
 --   - 'LAO ne obstaja': A cona references a lao that doesn't exist
@@ -129,7 +129,7 @@ BEGIN
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
         'cona',
-        'cone ne obstaja',
+        'cona ne obstaja',
         xc.id_rel_geo_cona
     FROM md_geo_obmxcona xc
     JOIN md_geo_obm obm ON xc.id_rel_geo_obm = obm.id
@@ -429,7 +429,36 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_model_version uuid;
+    v_obmxcona_trigger_existed boolean;
+    v_cona_lao_trigger_existed boolean;
+    v_lao_tao_trigger_existed boolean;
 BEGIN
+    -- Check whether each trigger was active before we drop it.
+    -- Only reinstate triggers that were already present; this prevents
+    -- reinstating triggers that the caller deliberately dropped beforehand
+    -- (e.g. test scripts that manipulate data directly).
+    SELECT EXISTS (
+        SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid
+        WHERE t.tgname = 'trg_validate_obmxcona_incremental' AND c.relname = 'md_geo_obmxcona'
+    ) INTO v_obmxcona_trigger_existed;
+
+    SELECT EXISTS (
+        SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid
+        WHERE t.tgname = 'trg_validate_cona_lao_incremental' AND c.relname = 'md_geo_cona'
+    ) INTO v_cona_lao_trigger_existed;
+
+    SELECT EXISTS (
+        SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid
+        WHERE t.tgname = 'trg_validate_lao_tao_incremental' AND c.relname = 'md_geo_lao'
+    ) INTO v_lao_tao_trigger_existed;
+
+    -- Drop hierarchy triggers so bulk validation is not slowed down
+    -- by incremental revalidation on every control-table write;
+    -- reinstate cleanly at the end.
+    EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona';
+    EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona';
+    EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao';
+
     FOR v_model_version IN
         SELECT DISTINCT id
         FROM md_verzije_modeli
@@ -439,5 +468,29 @@ BEGIN
         SELECT *
         FROM validate_all_hierarchy(v_model_version);
     END LOOP;
+
+    -- Reinstate only triggers that existed before AND whose functions are defined
+    -- (may not be the case when called from 00setup.sql before 98trigger_setups.sql runs)
+    IF v_obmxcona_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_obmxcona_incremental') THEN
+        EXECUTE '
+            CREATE TRIGGER trg_validate_obmxcona_incremental
+            AFTER INSERT OR UPDATE OR DELETE ON md_geo_obmxcona
+            FOR EACH ROW
+            EXECUTE FUNCTION validate_obmxcona_incremental()';
+    END IF;
+    IF v_cona_lao_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_cona_lao_incremental') THEN
+        EXECUTE '
+            CREATE TRIGGER trg_validate_cona_lao_incremental
+            AFTER INSERT OR UPDATE OF id_rel_geo_lao OR DELETE ON md_geo_cona
+            FOR EACH ROW
+            EXECUTE FUNCTION validate_cona_lao_incremental()';
+    END IF;
+    IF v_lao_tao_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_lao_tao_incremental') THEN
+        EXECUTE '
+            CREATE TRIGGER trg_validate_lao_tao_incremental
+            AFTER INSERT OR UPDATE OF id_rel_geo_tao OR DELETE ON md_geo_lao
+            FOR EACH ROW
+            EXECUTE FUNCTION validate_lao_tao_incremental()';
+    END IF;
 END;
 $$;

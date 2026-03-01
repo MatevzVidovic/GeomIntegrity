@@ -321,7 +321,7 @@ SELECT pg_temp.assert_true(
         SELECT 1 FROM validate_cona_hierarchy((SELECT value FROM agent_ids WHERE key='model1')) r
         WHERE r.orphan_cona_refs = 1
     ),
-    'cone ne obstaja should be detected'
+    'cona ne obstaja should be detected'
 );
 DELETE FROM md_geo_obmxcona WHERE id = (SELECT value FROM agent_ids WHERE key='link_orphan_cona');
 

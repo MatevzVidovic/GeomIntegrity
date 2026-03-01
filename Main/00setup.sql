@@ -28,8 +28,6 @@
 
 -- \i /Users/matevzvidovic/GeomIntegrity/Main/00setup.sql
 
--- \i /Users/matevzvidovic/GeomIntegrity/Main/98load_all_functions.sql
-
 -- \i /Users/matevzvidovic/GeomIntegrity/Main/99test_full_system.sql
 --
 
@@ -67,6 +65,10 @@ DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm;
 DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona;
 DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona;
 DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao;
+
+-- Load function definitions immediately after disabling triggers,
+-- so validation functions below can be called without stale DB definitions.
+\i 97load_fns.sql
 
 
 -- ============================================================================
@@ -156,15 +158,7 @@ END $$;
 
 
 -- ============================================================================
--- STEP 7: Load all function definitions
--- ============================================================================
--- Must be done before calling any validation functions, so the function bodies
--- in the database match the current source files.
-\i 98load_all_functions.sql
-
-
--- ============================================================================
--- STEP 8: Run initial topology validation
+-- STEP 7: Run initial topology validation
 -- ============================================================================
 -- This populates md_topoloske_kontrole_obm with all topology issues.
 
@@ -176,7 +170,7 @@ SELECT * FROM validate_all_topologies();
 
 
 -- ============================================================================
--- STEP 9: Create hierarchy validation table
+-- STEP 8: Create hierarchy validation table
 -- ============================================================================
 -- This table stores ID-based validation problems for cona/lao/tao hierarchy
 -- NOTE: This table should be created in Lift first!
@@ -188,16 +182,17 @@ SELECT * FROM validate_all_topologies();
 --     created_by UUID,
 --     updated_at TIMESTAMP,
 --     updated_by UUID,
---     id_rel_geo_verzija UUID NOT NULL,
+--     id_rel_verzije_modeli UUID NOT NULL,
 --     tip_entitete TEXT NOT NULL,  -- 'cona', 'lao', 'tao'
 --     tip_problema TEXT NOT NULL,  -- Describes problem and implicitly what problematicen_id refers to
 --     problematicen_id UUID        -- The relevant ID (entity or reference, depending on tip_problema)
 -- );
 
 -- Query optimization index
+DROP INDEX IF EXISTS idx_topoloske_kontrole_hierarhija_query;
 CREATE INDEX IF NOT EXISTS idx_topoloske_kontrole_hierarhija_query
 ON md_topoloske_kontrole_hierarhija (
-    id_rel_geo_verzija,
+    id_rel_verzije_modeli,
     tip_entitete,
     tip_problema,
     problematicen_id
@@ -217,8 +212,11 @@ BEGIN
 END $$;
 
 -- Constraint: tip_problema must be valid (drop and recreate to allow updates)
+-- Note: 97load_fns.sql already handles this migration; this block ensures
+-- it is also applied when running 00setup.sql directly.
 DO $$
 BEGIN
+    -- Drop first so the UPDATE below is not blocked by any old constraint value
     IF EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conname = 'check_tip_problema_hierarhija'
@@ -226,10 +224,14 @@ BEGIN
         ALTER TABLE md_topoloske_kontrole_hierarhija
         DROP CONSTRAINT check_tip_problema_hierarhija;
     END IF;
+    -- Rename rows from any previous name (idempotent)
+    UPDATE md_topoloske_kontrole_hierarhija
+    SET tip_problema = 'cona ne obstaja'
+    WHERE tip_problema = 'cone ne obstaja';
     ALTER TABLE md_topoloske_kontrole_hierarhija
     ADD CONSTRAINT check_tip_problema_hierarhija
     CHECK (tip_problema IN (
-        'obm. v nobeni coni', 'napačno obm.', 'cone ne obstaja', 'cona brez obm.',
+        'obm. v nobeni coni', 'napačno obm.', 'cona ne obstaja', 'cona brez obm.',
         'cona v nobenem LAO', 'LAO ne obstaja', 'LAO brez cone',
         'LAO v nobenem TAO', 'TAO ne obstaja', 'TAO brez LAO'
     ));
@@ -237,8 +239,7 @@ END $$;
 
 
 -- ============================================================================
--- STEP 10: Run initial hierarchy validation
--- (functions already loaded by step 7)
+-- STEP 9: Run initial hierarchy validation
 -- ============================================================================
 -- This populates md_topoloske_kontrole_hierarhija with all hierarchy issues.
 
@@ -250,13 +251,11 @@ SELECT * FROM validate_all_hierarchies();
 
 
 -- ============================================================================
--- STEP 11: Triggers
+-- STEP 10: Activate triggers
 -- ============================================================================
--- All triggers are already active (loaded by step 7 via 98load_all_functions.sql).
--- No further action needed.
-
--- To enable the triggers, run:
--- \i 7triggerHierarchy.sql
+-- Trigger functions and triggers are created here, after all validation has run,
+-- so the initial bulk validation above is not slowed down by per-row trigger calls.
+\i 98trigger_setups.sql
 
 
 -- ============================================================================

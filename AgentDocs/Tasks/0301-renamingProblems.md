@@ -1,5 +1,32 @@
 
 
+
+## 2nd added task
+
+`cone ne obstaja` should actually be `cona ne obstaja`
+
+id_rel_verzije_modeli is a field in md_topoloske_kontrole_hierarhija and should be filled
+
+
+
+## Added task
+
+Actually, can you fix your commit like this pls:
+
+  Make load_all_fns different file:
+  - keep only non trigger setups and name 97_load_fns
+  - make another file 98_trigger_setups where you set up the triggers
+
+
+  Then in 00setup, right after dropping triggers at top, do load fns
+
+  And only at the end of 00setup, zou do the activation of triggers
+
+  This way the validate_all fns dont suffer from managing triggers on every insert
+
+  In fact, make it so the validate_all fns for any model version actually drop the trigger and then reinstate it, so that they can be nicely sped up
+  whenever they are called - I assume this is the way to do it by best practices - if not, tell me another way so we can discuss
+
 ## Task
 
 

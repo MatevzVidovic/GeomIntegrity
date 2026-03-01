@@ -44,7 +44,7 @@
 | created_by | UUID | Creator ID |
 | updated_at | TIMESTAMP | Last update timestamp |
 | updated_by | UUID | Last updater ID |
-| id_rel_geo_verzija | UUID | Geo version ID |
+| id_rel_verzije_modeli | UUID | Model version ID |
 | **tip_entitete** | TEXT | Entity type ('cona', 'lao', 'tao') |
 | **tip_problema** | TEXT | Problem type (see list below) |
 | **problematicen_id** | UUID | The relevant ID (what it refers to depends on tip_problema) |
@@ -56,7 +56,7 @@
 |--------------|---------------------|
 | `obm. v nobeni coni` | The orphaned OBM's ID |
 | `napačno obm.` | The non-existent OBM ID referenced in obmxcona |
-| `cone ne obstaja` | The non-existent cona ID referenced in obmxcona |
+| `cona ne obstaja` | The non-existent cona ID referenced in obmxcona |
 | `cona brez obm.` | The empty cona's ID |
 
 #### LAO Problems:
@@ -75,10 +75,10 @@
 
 ### Constraints:
 - `tip_entitete` IN ('cona', 'lao', 'tao')
-- `tip_problema` IN ('obm. v nobeni coni', 'napačno obm.', 'cone ne obstaja', 'cona brez obm.', 'cona v nobenem LAO', 'LAO ne obstaja', 'LAO brez cone', 'LAO v nobenem TAO', 'TAO ne obstaja', 'TAO brez LAO')
+- `tip_problema` IN ('obm. v nobeni coni', 'napačno obm.', 'cona ne obstaja', 'cona brez obm.', 'cona v nobenem LAO', 'LAO ne obstaja', 'LAO brez cone', 'LAO v nobenem TAO', 'TAO ne obstaja', 'TAO brez LAO')
 
 ### Indexes:
-- `idx_topoloske_kontrole_hierarhija_query` ON (id_rel_geo_verzija, tip_entitete, tip_problema, problematicen_id)
+- `idx_topoloske_kontrole_hierarhija_query` ON (id_rel_verzije_modeli, tip_entitete, tip_problema, problematicen_id)
 
 ---
 

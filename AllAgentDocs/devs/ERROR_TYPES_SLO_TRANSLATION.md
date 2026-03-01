@@ -14,9 +14,9 @@ Spodaj je prevod vseh aktivnih tipov napak iz kontrolnih tabel.
 
 | Koda v bazi | Predlagan slovenski prevod | Pomen |
 |---|---|---|
-| `missing_obm_in_cona` | `obm. v nobeni coni` | obm. v tej verziji ni povezano v nobeno cono. |
-| `orphan_obm_ref` | `napačno obm.` | Vnos v `obmxcona` kaže na obm., ki ne obstaja (ali ni v pravi verziji obm.) |
-| `orphan_cona_ref` | `cone ne obstaja` | Vnos v `obmxcona` kaže na cono, ki ne obstaja. |
+| `missing_obm_in_cona` | `obm. v nobeni coni` | obm. v tej verziji modela ni povezano v nobeno cono. |
+| `orphan_obm_ref` | `napačno obm.` | Vnos v `obmxcona` kaže na obm., ki ne obstaja (ali ni v verziji verziji obm., ki se navezuje na verzijo modela con) |
+| `orphan_cona_ref` | `cona ne obstaja` | Vnos v `obmxcona` kaže na cono, ki ne obstaja. |
 | `empty_cona` | `cona brez obm.` | Cona nima nobenega povezanega obm. |
 | `missing_cona_in_lao` | `cona v nobenem LAO` | Cona nima nastavljenega `id_rel_geo_lao` (NULL), torej verzija modela za LAO ne more biti popolna. |
 | `orphan_lao_ref_in_cona` | `LAO ne obstaja` | Cona kaže na LAO, ki ne obstaja. |

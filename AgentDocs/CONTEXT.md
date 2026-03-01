@@ -83,7 +83,7 @@ Stores **ID-based** hierarchy problems for cona/lao/tao:
 **Cona problems:**
 - `obm. v nobeni coni` - OBM exists but not assigned to any cona
 - `napačno obm.` - obmxcona references non-existent OBM
-- `cone ne obstaja` - obmxcona references non-existent cona
+- `cona ne obstaja` - obmxcona references non-existent cona
 - `cona brez obm.` - Cona has no OBMs
 
 **LAO problems:**

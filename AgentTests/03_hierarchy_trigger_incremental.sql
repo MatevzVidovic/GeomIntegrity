@@ -141,17 +141,17 @@ SELECT pg_temp.assert_true(
     EXISTS (
         SELECT 1 FROM md_topoloske_kontrole_hierarhija
         WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
-          AND tip_problema = 'cone ne obstaja'
+          AND tip_problema = 'cona ne obstaja'
           AND problematicen_id = (SELECT value FROM agent_ids WHERE key='fake_cona')
     ),
-    'UPDATE obmxcona to missing cona should mark cone ne obstaja in source model'
+    'UPDATE obmxcona to missing cona should mark cona ne obstaja in source model'
 );
 
 SELECT pg_temp.assert_true(
     (
         SELECT COUNT(*) FROM md_topoloske_kontrole_hierarhija
         WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model2')
-          AND tip_problema IN ('obm. v nobeni coni', 'napačno obm.', 'cone ne obstaja')
+          AND tip_problema IN ('obm. v nobeni coni', 'napačno obm.', 'cona ne obstaja')
     ) = 0,
     'UPDATE obmxcona to missing cona should not introduce destination-model problems'
 );
@@ -168,7 +168,7 @@ SELECT pg_temp.assert_true(
             (SELECT value FROM agent_ids WHERE key='model1'),
             (SELECT value FROM agent_ids WHERE key='model2')
         )
-          AND tip_problema IN ('cone ne obstaja', 'napačno obm.', 'obm. v nobeni coni')
+          AND tip_problema IN ('cona ne obstaja', 'napačno obm.', 'obm. v nobeni coni')
     ) = 0,
     'Restoring obmxcona link should clear cona issues caused by update'
 );
@@ -219,9 +219,9 @@ SELECT pg_temp.assert_true(
     (
         SELECT COUNT(*) FROM md_topoloske_kontrole_hierarhija
         WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
-          AND tip_problema IN ('LAO brez cone', 'cone ne obstaja')
+          AND tip_problema IN ('LAO brez cone', 'cona ne obstaja')
     ) = 0,
-    'INSERT cona back should clear LAO brez cone and cone ne obstaja'
+    'INSERT cona back should clear LAO brez cone and cona ne obstaja'
 );
 
 \echo 'Case: lao trigger UPDATE/DELETE/INSERT'

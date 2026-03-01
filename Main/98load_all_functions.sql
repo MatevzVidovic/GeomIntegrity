@@ -1,13 +1,11 @@
 -- ============================================================================
--- 98load_all_functions.sql - Load All Function Definitions
+-- 98load_all_functions.sql - Load All Functions and Triggers
 -- ============================================================================
--- This script loads all validation functions and triggers WITHOUT running setup.
+-- Convenience wrapper: loads functions (97load_fns.sql) then triggers (98trigger_setups.sql).
 --
 -- IMPORTANT: Run this from the Main directory:
 --   \cd /path/to/GeomIntegrity/Main
 --   \i 98load_all_functions.sql
---
--- Or use absolute paths when running from elsewhere.
 --
 -- This script will STOP on first error and report failure.
 -- ============================================================================
@@ -22,20 +20,8 @@
 
 \timing on
 
-\echo '[1/5] Loading precision validation/fixing functions...'
-\i 1make2decimalPlaces.sql
-
-\echo '[2/5] Loading OBM topology validation functions...'
-\i 3checkAllTopologies.sql
-
-\echo '[3/5] Loading OBM incremental trigger...'
-\i 5trigger.sql
-
-\echo '[4/5] Loading hierarchy validation functions...'
-\i 6validateHierarchy.sql
-
-\echo '[5/5] Loading hierarchy incremental triggers...'
-\i 7triggerHierarchy.sql
+\i 97load_fns.sql
+\i 98trigger_setups.sql
 
 \echo ''
 \echo '================================================================================'

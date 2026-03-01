@@ -332,7 +332,23 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_version uuid;
+    v_trigger_existed boolean;
 BEGIN
+    -- Check whether the trigger was active before we drop it.
+    -- Only reinstate it at the end if it was already present; this prevents
+    -- reinstating triggers that the caller deliberately dropped beforehand
+    -- (e.g. test scripts that manipulate geometries directly).
+    SELECT EXISTS (
+        SELECT 1 FROM pg_trigger t
+        JOIN pg_class c ON t.tgrelid = c.oid
+        WHERE t.tgname = 'trg_validate_topology_incremental'
+          AND c.relname = 'md_geo_obm'
+    ) INTO v_trigger_existed;
+
+    -- Drop OBM trigger so each inserted control-table row doesn't pay
+    -- incremental-trigger overhead; reinstate cleanly at the end.
+    EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm';
+
     -- Process each version
     FOR v_version IN
         SELECT DISTINCT md_geo_obm.id_rel_geo_verzija
@@ -344,6 +360,15 @@ BEGIN
         FROM validate_all(v_version);
     END LOOP;
 
+    -- Reinstate trigger only if it existed before AND its function is defined
+    -- (may not be the case when called from 00setup.sql before 98trigger_setups.sql runs)
+    IF v_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_topology_incremental') THEN
+        EXECUTE '
+            CREATE TRIGGER trg_validate_topology_incremental
+            BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
+            FOR EACH ROW
+            EXECUTE FUNCTION validate_topology_incremental()';
+    END IF;
 END;
 $$;
 
