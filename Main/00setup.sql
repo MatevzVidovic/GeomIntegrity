@@ -156,7 +156,15 @@ END $$;
 
 
 -- ============================================================================
--- STEP 7: Run initial topology validation
+-- STEP 7: Load all function definitions
+-- ============================================================================
+-- Must be done before calling any validation functions, so the function bodies
+-- in the database match the current source files.
+\i 98load_all_functions.sql
+
+
+-- ============================================================================
+-- STEP 8: Run initial topology validation
 -- ============================================================================
 -- This populates md_topoloske_kontrole_obm with all topology issues.
 
@@ -165,16 +173,6 @@ END $$;
 
 -- For all model versions:
 SELECT * FROM validate_all_topologies();
-
-
--- ============================================================================
--- STEP 8: Re-enable OBM incremental trigger
--- ============================================================================
--- After initial validation, the trigger handles incremental updates.
--- This is done by running 5trigger.sql
-
--- To enable the OBM trigger, run:
--- \i 5trigger.sql
 
 
 -- ============================================================================
@@ -240,6 +238,7 @@ END $$;
 
 -- ============================================================================
 -- STEP 10: Run initial hierarchy validation
+-- (functions already loaded by step 7)
 -- ============================================================================
 -- This populates md_topoloske_kontrole_hierarhija with all hierarchy issues.
 
@@ -251,10 +250,10 @@ SELECT * FROM validate_all_hierarchies();
 
 
 -- ============================================================================
--- STEP 11: Enable hierarchy triggers
+-- STEP 11: Triggers
 -- ============================================================================
--- After initial validation, the triggers handle incremental updates.
--- This is done by running 7triggerHierarchy.sql
+-- All triggers are already active (loaded by step 7 via 98load_all_functions.sql).
+-- No further action needed.
 
 -- To enable the triggers, run:
 -- \i 7triggerHierarchy.sql
