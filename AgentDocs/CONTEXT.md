@@ -81,20 +81,20 @@ Stores **ID-based** hierarchy problems for cona/lao/tao:
 
 #### Problem Types for Hierarchy Validation:
 **Cona problems:**
-- `missing_obm_in_cona` - OBM exists but not assigned to any cona
-- `orphan_obm_ref` - obmxcona references non-existent OBM
-- `orphan_cona_ref` - obmxcona references non-existent cona
-- `empty_cona` - Cona has no OBMs
+- `obm. v nobeni coni` - OBM exists but not assigned to any cona
+- `napačno obm.` - obmxcona references non-existent OBM
+- `cone ne obstaja` - obmxcona references non-existent cona
+- `cona brez obm.` - Cona has no OBMs
 
 **LAO problems:**
-- `missing_cona_in_lao` - Cona not assigned to any LAO (id_rel_geo_lao IS NULL)
-- `orphan_lao_ref_in_cona` - Cona references non-existent LAO
-- `empty_lao` - LAO has no conas
+- `cona v nobenem LAO` - Cona not assigned to any LAO (id_rel_geo_lao IS NULL)
+- `LAO ne obstaja` - Cona references non-existent LAO
+- `LAO brez cone` - LAO has no conas
 
 **TAO problems:**
-- `missing_lao_in_tao` - LAO not assigned to any TAO (id_rel_geo_tao IS NULL)
-- `orphan_tao_ref_in_lao` - LAO references non-existent TAO
-- `empty_tao` - TAO has no LAOs
+- `LAO v nobenem TAO` - LAO not assigned to any TAO (id_rel_geo_tao IS NULL)
+- `TAO ne obstaja` - LAO references non-existent TAO
+- `TAO brez LAO` - TAO has no LAOs
 
 ## Implementation - File Organization
 

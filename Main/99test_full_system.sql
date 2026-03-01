@@ -373,7 +373,7 @@ DELETE FROM md_geo_obmxcona
 WHERE id_rel_geo_obm = (SELECT value FROM test_ids WHERE key='obm3');
 
 \echo '   Done: OBM3 removed from obmxcona (orphaned)'
-\echo '   Expected: 1 missing_obm_in_cona problem'
+\echo '   Expected: 1 obm. v nobeni coni problem'
 
 SELECT
     'Problems found: ' || COUNT(*) || ' (' || STRING_AGG(tip_problema, ', ') || ')' as result
@@ -393,7 +393,7 @@ DELETE FROM md_geo_obmxcona
 WHERE id_rel_geo_cona = (SELECT value FROM test_ids WHERE key='cona3');
 
 \echo '   Done: All OBMs removed from Cona3 (top row emptied)'
-\echo '   Expected: 1 empty_cona, multiple missing_obm_in_cona problems'
+\echo '   Expected: 1 cona brez obm., multiple obm. v nobeni coni problems'
 
 SELECT
     tip_entitete || ' - ' || tip_problema || ': ' || COUNT(*) as result
@@ -471,13 +471,13 @@ WHERE id_rel_geo_verzija = (SELECT value FROM test_ids WHERE key='version')
 -- Test 5: Orphan OBM should be detected (OBM3 removed from cona)
 INSERT INTO test_results
 SELECT
-    'Orphan OBM detection (missing_obm_in_cona)',
+    'Orphan OBM detection (obm. v nobeni coni)',
     '>=1',
     COUNT(*)::TEXT,
     COUNT(*) >= 1
 FROM md_topoloske_kontrole_hierarhija
 WHERE id_rel_verzije_modeli = (SELECT value FROM test_ids WHERE key='model')
-  AND tip_problema = 'missing_obm_in_cona';
+  AND tip_problema = 'obm. v nobeni coni';
 
 -- Test 6: Empty cona should be detected (Cona3 has no OBMs)
 INSERT INTO test_results
@@ -488,7 +488,7 @@ SELECT
     COUNT(*) = 1
 FROM md_topoloske_kontrole_hierarhija
 WHERE id_rel_verzije_modeli = (SELECT value FROM test_ids WHERE key='model')
-  AND tip_problema = 'empty_cona';
+  AND tip_problema = 'cona brez obm.';
 
 -- Test 7: Orphan LAO reference should be detected (Cona3 references deleted LAO2)
 INSERT INTO test_results
@@ -499,7 +499,7 @@ SELECT
     COUNT(*) >= 1
 FROM md_topoloske_kontrole_hierarhija
 WHERE id_rel_verzije_modeli = (SELECT value FROM test_ids WHERE key='model')
-  AND tip_problema IN ('orphan_lao_ref_in_cona', 'empty_lao');
+  AND tip_problema IN ('LAO ne obstaja', 'LAO brez cone');
 
 -- Show all test results
 \echo 'Test Results:'

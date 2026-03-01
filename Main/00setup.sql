@@ -25,7 +25,7 @@
 
 --     Possibly uncomment the part in this script about 2_decimal_places
 --     (btw: its nice that in this script we drop the triggers beforehand, so things are quicker)
---
+
 -- \i /Users/matevzvidovic/GeomIntegrity/Main/00setup.sql
 
 -- \i /Users/matevzvidovic/GeomIntegrity/Main/98load_all_functions.sql
@@ -218,21 +218,23 @@ BEGIN
     END IF;
 END $$;
 
--- Constraint: tip_problema must be valid
+-- Constraint: tip_problema must be valid (drop and recreate to allow updates)
 DO $$
 BEGIN
-    IF NOT EXISTS (
+    IF EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conname = 'check_tip_problema_hierarhija'
     ) THEN
         ALTER TABLE md_topoloske_kontrole_hierarhija
-        ADD CONSTRAINT check_tip_problema_hierarhija
-        CHECK (tip_problema IN (
-            'missing_obm_in_cona', 'orphan_obm_ref', 'orphan_cona_ref', 'empty_cona',
-            'missing_cona_in_lao', 'orphan_lao_ref_in_cona', 'empty_lao',
-            'missing_lao_in_tao', 'orphan_tao_ref_in_lao', 'empty_tao'
-        ));
+        DROP CONSTRAINT check_tip_problema_hierarhija;
     END IF;
+    ALTER TABLE md_topoloske_kontrole_hierarhija
+    ADD CONSTRAINT check_tip_problema_hierarhija
+    CHECK (tip_problema IN (
+        'obm. v nobeni coni', 'napačno obm.', 'cone ne obstaja', 'cona brez obm.',
+        'cona v nobenem LAO', 'LAO ne obstaja', 'LAO brez cone',
+        'LAO v nobenem TAO', 'TAO ne obstaja', 'TAO brez LAO'
+    ));
 END $$;
 
 

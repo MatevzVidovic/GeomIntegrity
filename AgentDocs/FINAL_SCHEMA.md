@@ -54,28 +54,28 @@
 #### Cona Problems:
 | tip_problema | problematicen_id refers to |
 |--------------|---------------------|
-| `missing_obm_in_cona` | The orphaned OBM's ID |
-| `orphan_obm_ref` | The non-existent OBM ID referenced in obmxcona |
-| `orphan_cona_ref` | The non-existent cona ID referenced in obmxcona |
-| `empty_cona` | The empty cona's ID |
+| `obm. v nobeni coni` | The orphaned OBM's ID |
+| `napačno obm.` | The non-existent OBM ID referenced in obmxcona |
+| `cone ne obstaja` | The non-existent cona ID referenced in obmxcona |
+| `cona brez obm.` | The empty cona's ID |
 
 #### LAO Problems:
 | tip_problema | problematicen_id refers to |
 |--------------|---------------------|
-| `missing_cona_in_lao` | The cona's ID that isn't assigned to any LAO |
-| `orphan_lao_ref_in_cona` | The non-existent LAO ID that cona references |
-| `empty_lao` | The empty LAO's ID |
+| `cona v nobenem LAO` | The cona's ID that isn't assigned to any LAO |
+| `LAO ne obstaja` | The non-existent LAO ID that cona references |
+| `LAO brez cone` | The empty LAO's ID |
 
 #### TAO Problems:
 | tip_problema | problematicen_id refers to |
 |--------------|---------------------|
-| `missing_lao_in_tao` | The LAO's ID that isn't assigned to any TAO |
-| `orphan_tao_ref_in_lao` | The non-existent TAO ID that LAO references |
-| `empty_tao` | The empty TAO's ID |
+| `LAO v nobenem TAO` | The LAO's ID that isn't assigned to any TAO |
+| `TAO ne obstaja` | The non-existent TAO ID that LAO references |
+| `TAO brez LAO` | The empty TAO's ID |
 
 ### Constraints:
 - `tip_entitete` IN ('cona', 'lao', 'tao')
-- `tip_problema` IN (all 10 problem types listed above)
+- `tip_problema` IN ('obm. v nobeni coni', 'napačno obm.', 'cone ne obstaja', 'cona brez obm.', 'cona v nobenem LAO', 'LAO ne obstaja', 'LAO brez cone', 'LAO v nobenem TAO', 'TAO ne obstaja', 'TAO brez LAO')
 
 ### Indexes:
 - `idx_topoloske_kontrole_hierarhija_query` ON (id_rel_geo_verzija, tip_entitete, tip_problema, problematicen_id)
@@ -127,12 +127,12 @@
 -- Find all conas with invalid LAO references
 SELECT * FROM md_topoloske_kontrole_hierarhija
 WHERE tip_entitete = 'cona'
-  AND tip_problema = 'orphan_lao_ref_in_cona';
+  AND tip_problema = 'LAO ne obstaja';
 -- problematicen_id contains the invalid LAO IDs
 
 -- Find all empty LAOs
 SELECT * FROM md_topoloske_kontrole_hierarhija
 WHERE tip_entitete = 'lao'
-  AND tip_problema = 'empty_lao';
+  AND tip_problema = 'LAO brez cone';
 -- problematicen_id contains the empty LAO IDs
 ```

@@ -18,16 +18,16 @@
 -- id_rel_verzije_modeli field as the version discriminator.
 --
 -- Problem types:
---   - 'missing_obm_in_cona': An OBM exists but is not assigned to any cona
---   - 'orphan_obm_ref': obmxcona references an OBM that doesn't exist
---   - 'orphan_cona_ref': obmxcona references a cona that doesn't exist
---   - 'empty_cona': A cona exists but has no OBMs assigned
---   - 'missing_cona_in_lao': A cona exists but is not assigned to any lao
---   - 'orphan_lao_ref_in_cona': A cona references a lao that doesn't exist
---   - 'empty_lao': A lao exists but has no conas assigned
---   - 'missing_lao_in_tao': A lao exists but is not assigned to any tao
---   - 'orphan_tao_ref_in_lao': A lao references a tao that doesn't exist
---   - 'empty_tao': A tao exists but has no laos assigned
+--   - 'obm. v nobeni coni': An OBM exists but is not assigned to any cona
+--   - 'napačno obm.': obmxcona references an OBM that doesn't exist
+--   - 'cone ne obstaja': obmxcona references a cona that doesn't exist
+--   - 'cona brez obm.': A cona exists but has no OBMs assigned
+--   - 'cona v nobenem LAO': A cona exists but is not assigned to any lao
+--   - 'LAO ne obstaja': A cona references a lao that doesn't exist
+--   - 'LAO brez cone': A lao exists but has no conas assigned
+--   - 'LAO v nobenem TAO': A lao exists but is not assigned to any tao
+--   - 'TAO ne obstaja': A lao references a tao that doesn't exist
+--   - 'TAO brez LAO': A tao exists but has no laos assigned
 -- ============================================================================
 
 
@@ -83,7 +83,7 @@ BEGIN
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
         'cona',
-        'missing_obm_in_cona',
+        'obm. v nobeni coni',
         obm.id
     FROM md_geo_obm obm
     WHERE obm.id_rel_geo_verzija = v_id_rel_geo_verzija
@@ -105,7 +105,7 @@ BEGIN
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
         'cona',
-        'orphan_obm_ref',
+        'napačno obm.',
         xc.id_rel_geo_obm
     FROM md_geo_obmxcona xc
     JOIN md_geo_cona c ON xc.id_rel_geo_cona = c.id
@@ -129,7 +129,7 @@ BEGIN
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
         'cona',
-        'orphan_cona_ref',
+        'cone ne obstaja',
         xc.id_rel_geo_cona
     FROM md_geo_obmxcona xc
     JOIN md_geo_obm obm ON xc.id_rel_geo_obm = obm.id
@@ -151,7 +151,7 @@ BEGIN
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
         'cona',
-        'empty_cona',
+        'cona brez obm.',
         c.id
     FROM md_geo_cona c
     WHERE c.id_rel_verzije_modeli = p_id_rel_verzije_modeli
@@ -205,7 +205,7 @@ BEGIN
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
         'lao',
-        'missing_cona_in_lao',
+        'cona v nobenem LAO',
         c.id
     FROM md_geo_cona c
     WHERE c.id_rel_verzije_modeli = p_id_rel_verzije_modeli
@@ -223,7 +223,7 @@ BEGIN
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
         'lao',
-        'orphan_lao_ref_in_cona',
+        'LAO ne obstaja',
         c.id_rel_geo_lao
     FROM md_geo_cona c
     WHERE c.id_rel_verzije_modeli = p_id_rel_verzije_modeli
@@ -245,7 +245,7 @@ BEGIN
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
         'lao',
-        'empty_lao',
+        'LAO brez cone',
         l.id
     FROM md_geo_lao l
     WHERE l.id_rel_verzije_modeli = p_id_rel_verzije_modeli
@@ -300,7 +300,7 @@ BEGIN
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
         'tao',
-        'missing_lao_in_tao',
+        'LAO v nobenem TAO',
         l.id
     FROM md_geo_lao l
     WHERE l.id_rel_verzije_modeli = p_id_rel_verzije_modeli
@@ -318,7 +318,7 @@ BEGIN
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
         'tao',
-        'orphan_tao_ref_in_lao',
+        'TAO ne obstaja',
         l.id_rel_geo_tao
     FROM md_geo_lao l
     WHERE l.id_rel_verzije_modeli = p_id_rel_verzije_modeli
@@ -340,7 +340,7 @@ BEGIN
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
         'tao',
-        'empty_tao',
+        'TAO brez LAO',
         t.id
     FROM md_geo_tao t
     WHERE t.id_rel_verzije_modeli = p_id_rel_verzije_modeli

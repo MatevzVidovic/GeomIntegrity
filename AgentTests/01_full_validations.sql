@@ -280,7 +280,7 @@ SELECT pg_temp.assert_true(
         SELECT 1 FROM validate_cona_hierarchy((SELECT value FROM agent_ids WHERE key='model1')) r
         WHERE r.missing_obms = 1 AND r.orphan_obm_refs = 0 AND r.orphan_cona_refs = 0 AND r.empty_conas = 0
     ),
-    'missing_obm_in_cona should be detected after unlinking obm3'
+    'obm. v nobeni coni should be detected after unlinking obm3'
 );
 INSERT INTO md_geo_obmxcona (id, created_at, created_by, id_rel_geo_obm, id_rel_geo_cona)
 VALUES (
@@ -304,7 +304,7 @@ SELECT pg_temp.assert_true(
         SELECT 1 FROM validate_cona_hierarchy((SELECT value FROM agent_ids WHERE key='model1')) r
         WHERE r.orphan_obm_refs = 1
     ),
-    'orphan_obm_ref should be detected'
+    'napačno obm. should be detected'
 );
 DELETE FROM md_geo_obmxcona WHERE id = (SELECT value FROM agent_ids WHERE key='link_orphan_obm');
 
@@ -321,7 +321,7 @@ SELECT pg_temp.assert_true(
         SELECT 1 FROM validate_cona_hierarchy((SELECT value FROM agent_ids WHERE key='model1')) r
         WHERE r.orphan_cona_refs = 1
     ),
-    'orphan_cona_ref should be detected'
+    'cone ne obstaja should be detected'
 );
 DELETE FROM md_geo_obmxcona WHERE id = (SELECT value FROM agent_ids WHERE key='link_orphan_cona');
 
@@ -331,7 +331,7 @@ SELECT pg_temp.assert_true(
         SELECT 1 FROM validate_cona_hierarchy((SELECT value FROM agent_ids WHERE key='model1')) r
         WHERE r.empty_conas = 1 AND r.missing_obms = 3
     ),
-    'empty_cona and missing_obm_in_cona should be detected for emptied cona3'
+    'cona brez obm. and obm. v nobeni coni should be detected for emptied cona3'
 );
 INSERT INTO md_geo_obmxcona (id, created_at, created_by, id_rel_geo_obm, id_rel_geo_cona)
 SELECT uuid_generate_v4(), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid,
@@ -365,7 +365,7 @@ SELECT pg_temp.assert_true(
         SELECT 1 FROM validate_lao_hierarchy((SELECT value FROM agent_ids WHERE key='model1')) r
         WHERE r.missing_conas = 1
     ),
-    'missing_cona_in_lao should be detected when cona2 lao is NULL'
+    'cona v nobenem LAO should be detected when cona2 lao is NULL'
 );
 UPDATE md_geo_cona
 SET id_rel_geo_lao = (SELECT value FROM agent_ids WHERE key='lao1')
@@ -379,7 +379,7 @@ SELECT pg_temp.assert_true(
         SELECT 1 FROM validate_lao_hierarchy((SELECT value FROM agent_ids WHERE key='model1')) r
         WHERE r.orphan_lao_refs = 1
     ),
-    'orphan_lao_ref_in_cona should be detected'
+    'LAO ne obstaja should be detected'
 );
 UPDATE md_geo_cona
 SET id_rel_geo_lao = (SELECT value FROM agent_ids WHERE key='lao1')
@@ -396,7 +396,7 @@ SELECT pg_temp.assert_true(
         SELECT 1 FROM validate_lao_hierarchy((SELECT value FROM agent_ids WHERE key='model1')) r
         WHERE r.empty_laos = 1
     ),
-    'empty_lao should be detected when lao1 has no conas'
+    'LAO brez cone should be detected when lao1 has no conas'
 );
 UPDATE md_geo_cona
 SET id_rel_geo_lao = (SELECT value FROM agent_ids WHERE key='lao1')
@@ -421,7 +421,7 @@ SELECT pg_temp.assert_true(
         SELECT 1 FROM validate_tao_hierarchy((SELECT value FROM agent_ids WHERE key='model1')) r
         WHERE r.missing_laos = 1
     ),
-    'missing_lao_in_tao should be detected when lao2 tao is NULL'
+    'LAO v nobenem TAO should be detected when lao2 tao is NULL'
 );
 UPDATE md_geo_lao
 SET id_rel_geo_tao = (SELECT value FROM agent_ids WHERE key='tao1')
@@ -435,7 +435,7 @@ SELECT pg_temp.assert_true(
         SELECT 1 FROM validate_tao_hierarchy((SELECT value FROM agent_ids WHERE key='model1')) r
         WHERE r.orphan_tao_refs = 1
     ),
-    'orphan_tao_ref_in_lao should be detected'
+    'TAO ne obstaja should be detected'
 );
 UPDATE md_geo_lao
 SET id_rel_geo_tao = (SELECT value FROM agent_ids WHERE key='tao1')
@@ -455,7 +455,7 @@ SELECT pg_temp.assert_true(
         SELECT 1 FROM validate_tao_hierarchy((SELECT value FROM agent_ids WHERE key='model1')) r
         WHERE r.empty_taos = 1
     ),
-    'empty_tao should be detected for tao with no laos'
+    'TAO brez LAO should be detected for tao with no laos'
 );
 DELETE FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao_empty');
 
