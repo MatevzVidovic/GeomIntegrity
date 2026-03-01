@@ -140,12 +140,14 @@ WHERE id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm1')
 
 SELECT pg_temp.assert_true(
     EXISTS (
-        SELECT 1 FROM md_topoloske_kontrole_hierarhija
-        WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
-          AND tip_problema = 'cona ne obstaja'
-          AND problematicen_id = (SELECT value FROM agent_ids WHERE key='fake_cona')
+        SELECT 1 FROM md_topoloske_kontrole_hierarhija h
+        JOIN md_geo_obmxcona xc ON xc.id = h.problematicen_id
+        WHERE h.id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
+          AND h.tip_problema = 'cona ne obstaja'
+          AND xc.id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm1')
+          AND xc.id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='fake_cona')
     ),
-    'UPDATE obmxcona to missing cona should mark cona ne obstaja in source model'
+    'UPDATE obmxcona to missing cona: problematicen_id should be the broken obmxcona row'
 );
 
 SELECT pg_temp.assert_true(

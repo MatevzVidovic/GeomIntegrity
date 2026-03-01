@@ -317,6 +317,15 @@ SELECT pg_temp.assert_true(
     ),
     'napačno obm. should be detected'
 );
+SELECT pg_temp.assert_true(
+    EXISTS (
+        SELECT 1 FROM md_topoloske_kontrole_hierarhija
+        WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
+          AND tip_problema = 'napačno obm.'
+          AND problematicen_id = (SELECT value FROM agent_ids WHERE key='link_orphan_obm')
+    ),
+    'napačno obm.: problematicen_id should be the broken obmxcona row id'
+);
 DELETE FROM md_geo_obmxcona WHERE id = (SELECT value FROM agent_ids WHERE key='link_orphan_obm');
 
 INSERT INTO md_geo_obmxcona (id, created_at, created_by, id_rel_geo_obm, id_rel_geo_cona)
@@ -333,6 +342,15 @@ SELECT pg_temp.assert_true(
         WHERE r.orphan_cona_refs = 1
     ),
     'cona ne obstaja should be detected'
+);
+SELECT pg_temp.assert_true(
+    EXISTS (
+        SELECT 1 FROM md_topoloske_kontrole_hierarhija
+        WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
+          AND tip_problema = 'cona ne obstaja'
+          AND problematicen_id = (SELECT value FROM agent_ids WHERE key='link_orphan_cona')
+    ),
+    'cona ne obstaja: problematicen_id should be the broken obmxcona row id'
 );
 DELETE FROM md_geo_obmxcona WHERE id = (SELECT value FROM agent_ids WHERE key='link_orphan_cona');
 
@@ -401,6 +419,15 @@ SELECT pg_temp.assert_true(
     ),
     'LAO ne obstaja should be detected'
 );
+SELECT pg_temp.assert_true(
+    EXISTS (
+        SELECT 1 FROM md_topoloske_kontrole_hierarhija
+        WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
+          AND tip_problema = 'LAO ne obstaja'
+          AND problematicen_id = (SELECT value FROM agent_ids WHERE key='cona2')
+    ),
+    'LAO ne obstaja: problematicen_id should be the cona with the broken LAO reference'
+);
 UPDATE md_geo_cona
 SET id_rel_geo_lao = (SELECT value FROM agent_ids WHERE key='lao1')
 WHERE id = (SELECT value FROM agent_ids WHERE key='cona2');
@@ -456,6 +483,15 @@ SELECT pg_temp.assert_true(
         WHERE r.orphan_tao_refs = 1
     ),
     'TAO ne obstaja should be detected'
+);
+SELECT pg_temp.assert_true(
+    EXISTS (
+        SELECT 1 FROM md_topoloske_kontrole_hierarhija
+        WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
+          AND tip_problema = 'TAO ne obstaja'
+          AND problematicen_id = (SELECT value FROM agent_ids WHERE key='lao2')
+    ),
+    'TAO ne obstaja: problematicen_id should be the LAO with the broken TAO reference'
 );
 UPDATE md_geo_lao
 SET id_rel_geo_tao = (SELECT value FROM agent_ids WHERE key='tao1')

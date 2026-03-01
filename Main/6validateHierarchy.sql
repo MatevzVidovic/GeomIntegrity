@@ -96,11 +96,12 @@ BEGIN
 
     -- 2. Find obmxcona entries referencing non-existent OBMs
     --    (scoped to conas belonging to this model version)
+    --    problematicen_id = the broken obmxcona row so the user can find and delete it
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
     )
-    SELECT DISTINCT
+    SELECT
         uuid_generate_v4(),
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
@@ -108,7 +109,7 @@ BEGIN
         v_id_rel_geo_verzija,
         'cona',
         'napačno obm.',
-        xc.id_rel_geo_obm
+        xc.id
     FROM md_geo_obmxcona xc
     JOIN md_geo_cona c ON xc.id_rel_geo_cona = c.id
     WHERE c.id_rel_verzije_modeli = p_id_rel_verzije_modeli
@@ -121,11 +122,12 @@ BEGIN
 
     -- 3. Find obmxcona entries referencing non-existent conas
     --    (scoped via OBMs belonging to this version)
+    --    problematicen_id = the broken obmxcona row so the user can find and delete it
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
     )
-    SELECT DISTINCT
+    SELECT
         uuid_generate_v4(),
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
@@ -133,7 +135,7 @@ BEGIN
         v_id_rel_geo_verzija,
         'cona',
         'cona ne obstaja',
-        xc.id_rel_geo_cona
+        xc.id
     FROM md_geo_obmxcona xc
     JOIN md_geo_obm obm ON xc.id_rel_geo_obm = obm.id
     WHERE obm.id_rel_geo_verzija = v_id_rel_geo_verzija
@@ -224,11 +226,12 @@ BEGIN
     GET DIAGNOSTICS v_missing_conas = ROW_COUNT;
 
     -- 2. Find conas referencing non-existent laos
+    --    problematicen_id = the cona with the broken reference so the user can fix it
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
     )
-    SELECT DISTINCT
+    SELECT
         uuid_generate_v4(),
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
@@ -236,7 +239,7 @@ BEGIN
         v_id_rel_geo_verzija,
         'lao',
         'LAO ne obstaja',
-        c.id_rel_geo_lao
+        c.id
     FROM md_geo_cona c
     WHERE c.id_rel_verzije_modeli = p_id_rel_verzije_modeli
       AND c.id_rel_geo_lao IS NOT NULL
@@ -328,6 +331,7 @@ BEGIN
     GET DIAGNOSTICS v_missing_laos = ROW_COUNT;
 
     -- 2. Find laos referencing non-existent taos
+    --    problematicen_id = the LAO with the broken reference so the user can fix it
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
@@ -340,7 +344,7 @@ BEGIN
         v_id_rel_geo_verzija,
         'tao',
         'TAO ne obstaja',
-        l.id_rel_geo_tao
+        l.id
     FROM md_geo_lao l
     WHERE l.id_rel_verzije_modeli = p_id_rel_verzije_modeli
       AND l.id_rel_geo_tao IS NOT NULL
