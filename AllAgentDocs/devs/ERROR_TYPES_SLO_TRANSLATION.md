@@ -2,28 +2,28 @@
 
 Spodaj je prevod vseh aktivnih tipov napak iz kontrolnih tabel.
 
-## OBM topološke napake (`md_topoloske_kontrole_obm.tip_topoloskega_problema`)
+## obm. topološke napake (`md_topoloske_kontrole_obm.tip_topoloskega_problema`)
 
 | Koda v bazi | Slovensko poimenovanje | Pomen |
 |---|---|---|
-| `prekrivanje` | prekrivanje | Dva OBM poligona se površinsko prekrivata. |
-| `luknja` | luknja | Del znotraj meje `slo_meja` ni pokrit z nobenim OBM. |
-| `preliv` | preliv | Del OBM geometrije sega izven `slo_meja`. |
+| `prekrivanje` | prekrivanje | Dva poligona obm. se površinsko prekrivata. |
+| `luknja` | luknja | Del znotraj meje `slo_meja` ni pokrit z nobenim obm. |
+| `preliv` | preliv | Del geometrije obm. sega izven `slo_meja`. |
 
 ## Hierarhične napake (`md_topoloske_kontrole_hierarhija.tip_problema`)
 
 | Koda v bazi | Predlagan slovenski prevod | Pomen |
 |---|---|---|
-| `missing_obm_in_cona` | manjkajoči OBM v coni | OBM v tej verziji ni povezan v nobeno cono. |
-| `orphan_obm_ref` | osirotela referenca na OBM | Povezava `obmxcona` kaže na OBM, ki ne obstaja (ali ni v pravi verziji OBM). |
-| `orphan_cona_ref` | osirotela referenca na cono | Povezava `obmxcona` kaže na cono, ki ne obstaja. |
-| `empty_cona` | prazna cona | Cona nima nobenega povezanega OBM. |
-| `missing_cona_in_lao` | manjkajoča cona v LAO | Cona nima nastavljenega `id_rel_geo_lao` (NULL). |
-| `orphan_lao_ref_in_cona` | osirotela referenca na LAO v coni | Cona kaže na LAO, ki ne obstaja. |
-| `empty_lao` | prazen LAO | LAO nima nobene cone. |
-| `missing_lao_in_tao` | manjkajoči LAO v TAO | LAO nima nastavljenega `id_rel_geo_tao` (NULL). |
-| `orphan_tao_ref_in_lao` | osirotela referenca na TAO v LAO | LAO kaže na TAO, ki ne obstaja. |
-| `empty_tao` | prazen TAO | TAO nima nobenega LAO. |
+| `missing_obm_in_cona` | `obm. v nobeni coni` | obm. v tej verziji ni povezano v nobeno cono. |
+| `orphan_obm_ref` | `napačno obm.` | Vnos v `obmxcona` kaže na obm., ki ne obstaja (ali ni v pravi verziji obm.) |
+| `orphan_cona_ref` | `cone ne obstaja` | Vnos v `obmxcona` kaže na cono, ki ne obstaja. |
+| `empty_cona` | `cona brez obm.` | Cona nima nobenega povezanega obm. |
+| `missing_cona_in_lao` | `cona v nobenem LAO` | Cona nima nastavljenega `id_rel_geo_lao` (NULL), torej verzija modela za LAO ne more biti popolna. |
+| `orphan_lao_ref_in_cona` | `LAO ne obstaja` | Cona kaže na LAO, ki ne obstaja. |
+| `empty_lao` | `LAO brez cone` | LAO nima nobene cone. |
+| `missing_lao_in_tao` | `LAO v nobenem TAO` | LAO nima nastavljenega `id_rel_geo_tao` (NULL), torej verzija modela za TAO ne more biti popolna. |
+| `orphan_tao_ref_in_lao` | `TAO ne obstaja` | LAO kaže na TAO, ki ne obstaja. |
+| `empty_tao` | `TAO brez LAO` | TAO nima nobenega LAO. |
 
 ## Opomba za razvoj
 
