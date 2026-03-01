@@ -14,7 +14,7 @@ Spodaj je prevod vseh aktivnih tipov napak iz kontrolnih tabel.
 
 | Koda v bazi | Predlagan slovenski prevod | Pomen |
 |---|---|---|
-| `missing_obm_in_cona` | `obm. v nobeni coni` | obm. v tej verziji modela ni povezano v nobeno cono. |
+| `missing_obm_in_cona` | `obm. v nobeni coni` | obm. v tej verziji modela ni povezan v nobeno cono. |
 | `orphan_obm_ref` | `napačno obm.` | Vnos v `obmxcona` kaže na obm., ki ne obstaja (ali ni v verziji verziji obm., ki se navezuje na verzijo modela con) |
 | `orphan_cona_ref` | `cona ne obstaja` | Vnos v `obmxcona` kaže na cono, ki ne obstaja. |
 | `empty_cona` | `cona brez obm.` | Cona nima nobenega povezanega obm. |
