@@ -135,8 +135,8 @@ BEGIN
 
 
 
-    RAISE NOTICE 'step 111 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
-    v_step_time := clock_timestamp();
+    -- RAISE NOTICE 'step 111 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
+    -- v_step_time := clock_timestamp();
 
 
 --     RAISE NOTICE 'Overflows: %', (SELECT COUNT(*) FROM temp_overflows);
@@ -302,7 +302,9 @@ BEGIN
           AND c.relname = 'md_geo_obm'
     ) INTO v_trigger_existed;
 
-    EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm';
+    IF v_trigger_existed THEN
+        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm';
+    END IF;
 
     -- Get count of entries for this version
     SELECT COUNT(*)
@@ -378,7 +380,9 @@ BEGIN
 
     -- Drop OBM trigger so each inserted control-table row doesn't pay
     -- incremental-trigger overhead; reinstate cleanly at the end.
-    EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm';
+    IF v_trigger_existed THEN
+        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm';
+    END IF;
 
     -- Process each version
     FOR v_version IN

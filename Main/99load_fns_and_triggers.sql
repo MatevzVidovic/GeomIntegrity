@@ -1,11 +1,11 @@
 -- ============================================================================
--- 98load_all_functions.sql - Load All Functions and Triggers
+-- 99load_fns_and_triggers.sql - Load All Functions and Triggers
 -- ============================================================================
 -- Convenience wrapper: loads functions (97load_fns.sql) then triggers (98trigger_setups.sql).
 --
 -- IMPORTANT: Run this from the Main directory:
 --   \cd /path/to/GeomIntegrity/Main
---   \i 98load_all_functions.sql
+--   \i /Users/matevzvidovic/GeomIntegrity/Main/99load_fns_and_triggers.sql
 --
 -- This script will STOP on first error and report failure.
 -- ============================================================================
@@ -20,8 +20,8 @@
 
 \timing on
 
-\i 97load_fns.sql
-\i 98trigger_setups.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/97load_fns.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/98trigger_setups.sql
 
 \echo ''
 \echo '================================================================================'

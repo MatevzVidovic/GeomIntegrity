@@ -9,7 +9,7 @@
 --
 -- IMPORTANT: Run this from the Main directory:
 --   \cd /path/to/GeomIntegrity/Main
---   \i 99test_full_system.sql
+--   \i /Users/matevzvidovic/GeomIntegrity/Main/99test_full_system.sql
 --
 -- TRANSACTION SAFETY:
 -- This script runs in a transaction and automatically rolls back at the end.
@@ -311,8 +311,8 @@ ORDER BY tip_entitete, tip_problema;
 -- ============================================================================
 \echo ''
 \echo '[7/12] Re-enabling triggers...'
-\i 5trigger.sql
-\i 7triggerHierarchy.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/5trigger.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/7triggerHierarchy.sql
 \echo '   Done: Triggers enabled'
 
 

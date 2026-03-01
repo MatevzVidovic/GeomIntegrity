@@ -31,6 +31,9 @@
 -- \i /Users/matevzvidovic/GeomIntegrity/Main/99test_full_system.sql
 --
 
+\pset pager off
+
+
 -- ============================================================================
 -- STEP 1: Create OBM topology controls table (if not exists)
 -- ============================================================================
@@ -68,7 +71,7 @@ DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao;
 
 -- Load function definitions immediately after disabling triggers,
 -- so validation functions below can be called without stale DB definitions.
-\i 97load_fns.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/97load_fns.sql
 
 
 -- ============================================================================
@@ -256,7 +259,7 @@ SELECT * FROM validate_all_hierarchies();
 -- ============================================================================
 -- Trigger functions and triggers are created here, after all validation has run,
 -- so the initial bulk validation above is not slowed down by per-row trigger calls.
-\i 98trigger_setups.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/98trigger_setups.sql
 
 
 -- ============================================================================

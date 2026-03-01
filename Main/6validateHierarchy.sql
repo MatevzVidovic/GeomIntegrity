@@ -430,9 +430,15 @@ BEGIN
         WHERE t.tgname = 'trg_validate_lao_tao_incremental' AND c.relname = 'md_geo_lao'
     ) INTO v_lao_tao_trigger_existed;
 
-    EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona';
-    EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona';
-    EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao';
+    IF v_obmxcona_trigger_existed THEN
+        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona';
+    END IF;
+    IF v_cona_lao_trigger_existed THEN
+        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona';
+    END IF;
+    IF v_lao_tao_trigger_existed THEN
+        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao';
+    END IF;
 
     SELECT * INTO v_cona_results FROM validate_cona_hierarchy(p_id_rel_verzije_modeli);
     SELECT * INTO v_lao_results FROM validate_lao_hierarchy(p_id_rel_verzije_modeli);
@@ -527,9 +533,15 @@ BEGIN
     -- Drop hierarchy triggers so bulk validation is not slowed down
     -- by incremental revalidation on every control-table write;
     -- reinstate cleanly at the end.
-    EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona';
-    EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona';
-    EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao';
+    IF v_obmxcona_trigger_existed THEN
+        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona';
+    END IF;
+    IF v_cona_lao_trigger_existed THEN
+        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona';
+    END IF;
+    IF v_lao_tao_trigger_existed THEN
+        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao';
+    END IF;
 
     FOR v_model_version IN
         SELECT DISTINCT id

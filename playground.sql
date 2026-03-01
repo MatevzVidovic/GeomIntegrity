@@ -144,7 +144,7 @@ DROP FUNCTION IF EXISTS validate_obmxcona_incremental() CASCADE;
   DROP FUNCTION IF EXISTS validate_all_topologies();
 
 
-\i /Users/matevzvidovic/GeomIntegrity/Main/98load_all_functions.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/99load_fns_and_triggers.sql
 
 SELECT * FROM validate_all_topologies();
 
