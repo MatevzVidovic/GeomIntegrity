@@ -74,7 +74,7 @@ BEGIN
 
     -- 1. Find OBMs not assigned to any cona
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_verzije_modeli,
+        id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT
@@ -82,6 +82,7 @@ BEGIN
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
+        v_id_rel_geo_verzija,
         'cona',
         'obm. v nobeni coni',
         obm.id
@@ -96,7 +97,7 @@ BEGIN
     -- 2. Find obmxcona entries referencing non-existent OBMs
     --    (scoped to conas belonging to this model version)
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_verzije_modeli,
+        id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT DISTINCT
@@ -104,6 +105,7 @@ BEGIN
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
+        v_id_rel_geo_verzija,
         'cona',
         'napačno obm.',
         xc.id_rel_geo_obm
@@ -120,7 +122,7 @@ BEGIN
     -- 3. Find obmxcona entries referencing non-existent conas
     --    (scoped via OBMs belonging to this version)
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_verzije_modeli,
+        id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT DISTINCT
@@ -128,6 +130,7 @@ BEGIN
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
+        v_id_rel_geo_verzija,
         'cona',
         'cona ne obstaja',
         xc.id_rel_geo_cona
@@ -142,7 +145,7 @@ BEGIN
 
     -- 4. Find conas with no OBMs (for this model version)
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_verzije_modeli,
+        id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT
@@ -150,6 +153,7 @@ BEGIN
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
+        v_id_rel_geo_verzija,
         'cona',
         'cona brez obm.',
         c.id
@@ -188,7 +192,13 @@ DECLARE
     v_missing_conas INTEGER := 0;
     v_orphan_lao_refs INTEGER := 0;
     v_empty_laos INTEGER := 0;
+    v_id_rel_geo_verzija UUID;
 BEGIN
+    -- Get the OBM version for this model version
+    SELECT id_rel_geo_verzija INTO v_id_rel_geo_verzija
+    FROM md_verzije_modeli
+    WHERE id = p_id_rel_verzije_modeli;
+
     -- Clear existing lao problems for this model version
     DELETE FROM md_topoloske_kontrole_hierarhija
     WHERE id_rel_verzije_modeli = p_id_rel_verzije_modeli
@@ -196,7 +206,7 @@ BEGIN
 
     -- 1. Find conas not assigned to any lao (id_rel_geo_lao IS NULL)
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_verzije_modeli,
+        id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT
@@ -204,6 +214,7 @@ BEGIN
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
+        v_id_rel_geo_verzija,
         'lao',
         'cona v nobenem LAO',
         c.id
@@ -214,7 +225,7 @@ BEGIN
 
     -- 2. Find conas referencing non-existent laos
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_verzije_modeli,
+        id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT DISTINCT
@@ -222,6 +233,7 @@ BEGIN
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
+        v_id_rel_geo_verzija,
         'lao',
         'LAO ne obstaja',
         c.id_rel_geo_lao
@@ -236,7 +248,7 @@ BEGIN
 
     -- 3. Find laos with no conas (for this model version)
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_verzije_modeli,
+        id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT
@@ -244,6 +256,7 @@ BEGIN
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
+        v_id_rel_geo_verzija,
         'lao',
         'LAO brez cone',
         l.id
@@ -283,7 +296,13 @@ DECLARE
     v_missing_laos INTEGER := 0;
     v_orphan_tao_refs INTEGER := 0;
     v_empty_taos INTEGER := 0;
+    v_id_rel_geo_verzija UUID;
 BEGIN
+    -- Get the OBM version for this model version
+    SELECT id_rel_geo_verzija INTO v_id_rel_geo_verzija
+    FROM md_verzije_modeli
+    WHERE id = p_id_rel_verzije_modeli;
+
     -- Clear existing tao problems for this model version
     DELETE FROM md_topoloske_kontrole_hierarhija
     WHERE id_rel_verzije_modeli = p_id_rel_verzije_modeli
@@ -291,7 +310,7 @@ BEGIN
 
     -- 1. Find laos not assigned to any tao (id_rel_geo_tao IS NULL)
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_verzije_modeli,
+        id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT
@@ -299,6 +318,7 @@ BEGIN
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
+        v_id_rel_geo_verzija,
         'tao',
         'LAO v nobenem TAO',
         l.id
@@ -309,7 +329,7 @@ BEGIN
 
     -- 2. Find laos referencing non-existent taos
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_verzije_modeli,
+        id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT
@@ -317,6 +337,7 @@ BEGIN
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
+        v_id_rel_geo_verzija,
         'tao',
         'TAO ne obstaja',
         l.id_rel_geo_tao
@@ -331,7 +352,7 @@ BEGIN
 
     -- 3. Find taos with no laos (for this model version)
     INSERT INTO md_topoloske_kontrole_hierarhija (
-        id, created_at, created_by, id_rel_verzije_modeli,
+        id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
     )
     SELECT
@@ -339,6 +360,7 @@ BEGIN
         now()::timestamp,
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_verzije_modeli,
+        v_id_rel_geo_verzija,
         'tao',
         'TAO brez LAO',
         t.id
@@ -359,7 +381,9 @@ $$;
 -- ============================================================================
 -- FUNCTION: validate_all_hierarchy
 -- ============================================================================
--- Runs all hierarchy validations for a given model version
+-- Runs all hierarchy validations for a given model version.
+-- Drops hierarchy triggers before validation and reinstates them after,
+-- so that per-row trigger overhead is avoided during bulk control-table writes.
 
 DROP FUNCTION IF EXISTS validate_all_hierarchy(uuid);
 
@@ -383,10 +407,58 @@ DECLARE
     v_cona_results RECORD;
     v_lao_results RECORD;
     v_tao_results RECORD;
+    v_obmxcona_trigger_existed boolean;
+    v_cona_lao_trigger_existed boolean;
+    v_lao_tao_trigger_existed boolean;
 BEGIN
+    -- Check whether each trigger was active before we drop it.
+    -- Only reinstate triggers that were already present; this prevents
+    -- reinstating triggers that the caller deliberately dropped beforehand
+    -- (e.g. validate_all_hierarchies() or test scripts).
+    SELECT EXISTS (
+        SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid
+        WHERE t.tgname = 'trg_validate_obmxcona_incremental' AND c.relname = 'md_geo_obmxcona'
+    ) INTO v_obmxcona_trigger_existed;
+
+    SELECT EXISTS (
+        SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid
+        WHERE t.tgname = 'trg_validate_cona_lao_incremental' AND c.relname = 'md_geo_cona'
+    ) INTO v_cona_lao_trigger_existed;
+
+    SELECT EXISTS (
+        SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid
+        WHERE t.tgname = 'trg_validate_lao_tao_incremental' AND c.relname = 'md_geo_lao'
+    ) INTO v_lao_tao_trigger_existed;
+
+    EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona';
+    EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona';
+    EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao';
+
     SELECT * INTO v_cona_results FROM validate_cona_hierarchy(p_id_rel_verzije_modeli);
     SELECT * INTO v_lao_results FROM validate_lao_hierarchy(p_id_rel_verzije_modeli);
     SELECT * INTO v_tao_results FROM validate_tao_hierarchy(p_id_rel_verzije_modeli);
+
+    IF v_obmxcona_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_obmxcona_incremental') THEN
+        EXECUTE '
+            CREATE TRIGGER trg_validate_obmxcona_incremental
+            AFTER INSERT OR UPDATE OR DELETE ON md_geo_obmxcona
+            FOR EACH ROW
+            EXECUTE FUNCTION validate_obmxcona_incremental()';
+    END IF;
+    IF v_cona_lao_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_cona_lao_incremental') THEN
+        EXECUTE '
+            CREATE TRIGGER trg_validate_cona_lao_incremental
+            AFTER INSERT OR UPDATE OF id_rel_geo_lao OR DELETE ON md_geo_cona
+            FOR EACH ROW
+            EXECUTE FUNCTION validate_cona_lao_incremental()';
+    END IF;
+    IF v_lao_tao_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_lao_tao_incremental') THEN
+        EXECUTE '
+            CREATE TRIGGER trg_validate_lao_tao_incremental
+            AFTER INSERT OR UPDATE OF id_rel_geo_tao OR DELETE ON md_geo_lao
+            FOR EACH ROW
+            EXECUTE FUNCTION validate_lao_tao_incremental()';
+    END IF;
 
     RETURN QUERY SELECT
         p_id_rel_verzije_modeli,

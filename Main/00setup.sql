@@ -193,6 +193,7 @@ DROP INDEX IF EXISTS idx_topoloske_kontrole_hierarhija_query;
 CREATE INDEX IF NOT EXISTS idx_topoloske_kontrole_hierarhija_query
 ON md_topoloske_kontrole_hierarhija (
     id_rel_verzije_modeli,
+    id_rel_geo_verzija,
     tip_entitete,
     tip_problema,
     problematicen_id

@@ -289,7 +289,21 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_total_count INTEGER := 0;
+    v_trigger_existed boolean;
 BEGIN
+    -- Check whether the topology trigger was active before we drop it.
+    -- Only reinstate it at the end if it was already present; this prevents
+    -- reinstating triggers that the caller deliberately dropped beforehand
+    -- (e.g. validate_all_topologies() or test scripts).
+    SELECT EXISTS (
+        SELECT 1 FROM pg_trigger t
+        JOIN pg_class c ON t.tgrelid = c.oid
+        WHERE t.tgname = 'trg_validate_topology_incremental'
+          AND c.relname = 'md_geo_obm'
+    ) INTO v_trigger_existed;
+
+    EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm';
+
     -- Get count of entries for this version
     SELECT COUNT(*)
     INTO v_total_count
@@ -298,6 +312,15 @@ BEGIN
 
     IF v_total_count = 0 THEN
         RAISE NOTICE 'No entries found for version %', p_id_rel_geo_verzija;
+
+        IF v_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_topology_incremental') THEN
+            EXECUTE '
+                CREATE TRIGGER trg_validate_topology_incremental
+                BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
+                FOR EACH ROW
+                EXECUTE FUNCTION validate_topology_incremental()';
+        END IF;
+
         RETURN QUERY SELECT p_id_rel_geo_verzija, 0, 0, 0, 0;
         RETURN;
     END IF;
@@ -305,6 +328,14 @@ BEGIN
     holes_found := validate_holes(p_id_rel_geo_verzija);
     overflows_found := validate_overflows(p_id_rel_geo_verzija);
     intersections_found := validate_intersections(p_id_rel_geo_verzija);
+
+    IF v_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_topology_incremental') THEN
+        EXECUTE '
+            CREATE TRIGGER trg_validate_topology_incremental
+            BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
+            FOR EACH ROW
+            EXECUTE FUNCTION validate_topology_incremental()';
+    END IF;
 
     RETURN QUERY SELECT
                      p_id_rel_geo_verzija,

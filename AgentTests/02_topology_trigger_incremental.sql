@@ -1,5 +1,6 @@
 \set ON_ERROR_STOP on
 \timing on
+\pset pager off
 
 \echo ''
 \echo '======================================================================'

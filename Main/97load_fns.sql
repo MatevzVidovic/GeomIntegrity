@@ -20,7 +20,23 @@
 \echo '[3/3] Loading hierarchy validation functions...'
 \i 6validateHierarchy.sql
 
-\echo '[4/3] Migrating tip_problema constraint to current valid values...'
+\echo '[4/3] Migrating md_topoloske_kontrole_hierarhija schema and tip_problema constraint...'
+DO $$
+BEGIN
+    -- Add id_rel_geo_verzija column if it does not yet exist.
+    -- This column mirrors md_verzije_modeli.id_rel_geo_verzija so that
+    -- the user can see both the model version and the OBM version for
+    -- each hierarchy problem without needing a join.
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'md_topoloske_kontrole_hierarhija'
+          AND column_name = 'id_rel_geo_verzija'
+    ) THEN
+        ALTER TABLE md_topoloske_kontrole_hierarhija
+        ADD COLUMN id_rel_geo_verzija UUID;
+    END IF;
+END $$;
+
 DO $$
 BEGIN
     -- Drop first so the UPDATE below is not blocked by the old constraint
