@@ -20,6 +20,12 @@ print("export PGPASSWORD={}".format(shlex.quote(str(c["password"]))))
 PY
 )"
 
+# For by hand:
+#   \cd /Users/matevzvidovic/GeomIntegrity
+#   \i AgentTests/01_full_validations.sql
+#   \i AgentTests/02_topology_trigger_incremental.sql
+#   \i AgentTests/03_hierarchy_trigger_incremental.sql
+  
 SQL_SCRIPTS=(
   "$ROOT_DIR/AgentTests/01_full_validations.sql"
   "$ROOT_DIR/AgentTests/02_topology_trigger_incremental.sql"
