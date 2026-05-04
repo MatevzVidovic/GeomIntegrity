@@ -386,8 +386,8 @@ $$;
 -- FUNCTION: validate_all_hierarchy
 -- ============================================================================
 -- Runs all hierarchy validations for a given model version.
--- Drops hierarchy triggers before validation and reinstates them after,
--- so that per-row trigger overhead is avoided during bulk control-table writes.
+-- This function only performs validation queries; trigger suppression is
+-- handled by validate_all_hierarchies() in the bulk path.
 
 DROP FUNCTION IF EXISTS validate_all_hierarchy(uuid);
 
@@ -411,64 +411,10 @@ DECLARE
     v_cona_results RECORD;
     v_lao_results RECORD;
     v_tao_results RECORD;
-    v_obmxcona_trigger_existed boolean;
-    v_cona_lao_trigger_existed boolean;
-    v_lao_tao_trigger_existed boolean;
 BEGIN
-    -- Check whether each trigger was active before we drop it.
-    -- Only reinstate triggers that were already present; this prevents
-    -- reinstating triggers that the caller deliberately dropped beforehand
-    -- (e.g. validate_all_hierarchies() or test scripts).
-    SELECT EXISTS (
-        SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid
-        WHERE t.tgname = 'trg_validate_obmxcona_incremental' AND c.relname = 'md_geo_obmxcona'
-    ) INTO v_obmxcona_trigger_existed;
-
-    SELECT EXISTS (
-        SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid
-        WHERE t.tgname = 'trg_validate_cona_lao_incremental' AND c.relname = 'md_geo_cona'
-    ) INTO v_cona_lao_trigger_existed;
-
-    SELECT EXISTS (
-        SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid
-        WHERE t.tgname = 'trg_validate_lao_tao_incremental' AND c.relname = 'md_geo_lao'
-    ) INTO v_lao_tao_trigger_existed;
-
-    IF v_obmxcona_trigger_existed THEN
-        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona';
-    END IF;
-    IF v_cona_lao_trigger_existed THEN
-        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona';
-    END IF;
-    IF v_lao_tao_trigger_existed THEN
-        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao';
-    END IF;
-
     SELECT * INTO v_cona_results FROM validate_cona_hierarchy(p_id_rel_verzije_modeli);
     SELECT * INTO v_lao_results FROM validate_lao_hierarchy(p_id_rel_verzije_modeli);
     SELECT * INTO v_tao_results FROM validate_tao_hierarchy(p_id_rel_verzije_modeli);
-
-    IF v_obmxcona_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_obmxcona_incremental') THEN
-        EXECUTE '
-            CREATE TRIGGER trg_validate_obmxcona_incremental
-            AFTER INSERT OR UPDATE OR DELETE ON md_geo_obmxcona
-            FOR EACH ROW
-            EXECUTE FUNCTION validate_obmxcona_incremental()';
-    END IF;
-    IF v_cona_lao_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_cona_lao_incremental') THEN
-        EXECUTE '
-            CREATE TRIGGER trg_validate_cona_lao_incremental
-            AFTER INSERT OR UPDATE OF id_rel_geo_lao OR DELETE ON md_geo_cona
-            FOR EACH ROW
-            EXECUTE FUNCTION validate_cona_lao_incremental()';
-    END IF;
-    IF v_lao_tao_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_lao_tao_incremental') THEN
-        EXECUTE '
-            CREATE TRIGGER trg_validate_lao_tao_incremental
-            AFTER INSERT OR UPDATE OF id_rel_geo_tao OR DELETE ON md_geo_lao
-            FOR EACH ROW
-            EXECUTE FUNCTION validate_lao_tao_incremental()';
-    END IF;
 
     RETURN QUERY SELECT
         p_id_rel_verzije_modeli,
@@ -484,6 +430,111 @@ BEGIN
         v_tao_results.empty_taos;
 END;
 $$;
+
+
+
+-- -- ============================================================================
+-- -- FUNCTION: validate_all_hierarchy_trigger_dropping
+-- -- ============================================================================
+-- -- Runs all hierarchy validations for a given model version.
+-- -- Drops hierarchy triggers before validation and reinstates them after,
+-- -- so that per-row trigger overhead is avoided during bulk control-table writes.
+
+-- DROP FUNCTION IF EXISTS validate_all_hierarchy_trigger_dropping(uuid);
+
+-- CREATE OR REPLACE FUNCTION validate_all_hierarchy_trigger_dropping(p_id_rel_verzije_modeli uuid)
+-- RETURNS TABLE(
+--     chosen_id_rel_verzije_modeli uuid,
+--     cona_missing_obms INTEGER,
+--     cona_orphan_obm_refs INTEGER,
+--     cona_orphan_cona_refs INTEGER,
+--     cona_empty INTEGER,
+--     lao_missing_conas INTEGER,
+--     lao_orphan_refs INTEGER,
+--     lao_empty INTEGER,
+--     tao_missing_laos INTEGER,
+--     tao_orphan_refs INTEGER,
+--     tao_empty INTEGER
+-- )
+-- LANGUAGE plpgsql
+-- AS $$
+-- DECLARE
+--     v_cona_results RECORD;
+--     v_lao_results RECORD;
+--     v_tao_results RECORD;
+--     v_obmxcona_trigger_existed boolean;
+--     v_cona_lao_trigger_existed boolean;
+--     v_lao_tao_trigger_existed boolean;
+-- BEGIN
+--     -- Check whether each trigger was active before we drop it.
+--     -- Only reinstate triggers that were already present; this prevents
+--     -- reinstating triggers that the caller deliberately dropped beforehand
+--     -- (e.g. validate_all_hierarchies() or test scripts).
+--     SELECT EXISTS (
+--         SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid
+--         WHERE t.tgname = 'trg_validate_obmxcona_incremental' AND c.relname = 'md_geo_obmxcona'
+--     ) INTO v_obmxcona_trigger_existed;
+
+--     SELECT EXISTS (
+--         SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid
+--         WHERE t.tgname = 'trg_validate_cona_lao_incremental' AND c.relname = 'md_geo_cona'
+--     ) INTO v_cona_lao_trigger_existed;
+
+--     SELECT EXISTS (
+--         SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid
+--         WHERE t.tgname = 'trg_validate_lao_tao_incremental' AND c.relname = 'md_geo_lao'
+--     ) INTO v_lao_tao_trigger_existed;
+
+--     IF v_obmxcona_trigger_existed THEN
+--         EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona';
+--     END IF;
+--     IF v_cona_lao_trigger_existed THEN
+--         EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona';
+--     END IF;
+--     IF v_lao_tao_trigger_existed THEN
+--         EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao';
+--     END IF;
+
+--     SELECT * INTO v_cona_results FROM validate_cona_hierarchy(p_id_rel_verzije_modeli);
+--     SELECT * INTO v_lao_results FROM validate_lao_hierarchy(p_id_rel_verzije_modeli);
+--     SELECT * INTO v_tao_results FROM validate_tao_hierarchy(p_id_rel_verzije_modeli);
+
+--     IF v_obmxcona_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_obmxcona_incremental') THEN
+--         EXECUTE '
+--             CREATE TRIGGER trg_validate_obmxcona_incremental
+--             AFTER INSERT OR UPDATE OR DELETE ON md_geo_obmxcona
+--             FOR EACH ROW
+--             EXECUTE FUNCTION validate_obmxcona_incremental()';
+--     END IF;
+--     IF v_cona_lao_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_cona_lao_incremental') THEN
+--         EXECUTE '
+--             CREATE TRIGGER trg_validate_cona_lao_incremental
+--             AFTER INSERT OR UPDATE OF id_rel_geo_lao OR DELETE ON md_geo_cona
+--             FOR EACH ROW
+--             EXECUTE FUNCTION validate_cona_lao_incremental()';
+--     END IF;
+--     IF v_lao_tao_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_lao_tao_incremental') THEN
+--         EXECUTE '
+--             CREATE TRIGGER trg_validate_lao_tao_incremental
+--             AFTER INSERT OR UPDATE OF id_rel_geo_tao OR DELETE ON md_geo_lao
+--             FOR EACH ROW
+--             EXECUTE FUNCTION validate_lao_tao_incremental()';
+--     END IF;
+
+--     RETURN QUERY SELECT
+--         p_id_rel_verzije_modeli,
+--         v_cona_results.missing_obms,
+--         v_cona_results.orphan_obm_refs,
+--         v_cona_results.orphan_cona_refs,
+--         v_cona_results.empty_conas,
+--         v_lao_results.missing_conas,
+--         v_lao_results.orphan_lao_refs,
+--         v_lao_results.empty_laos,
+--         v_tao_results.missing_laos,
+--         v_tao_results.orphan_tao_refs,
+--         v_tao_results.empty_taos;
+-- END;
+-- $$;
 
 
 -- ============================================================================
@@ -582,3 +633,6 @@ BEGIN
     END IF;
 END;
 $$;
+
+
+
