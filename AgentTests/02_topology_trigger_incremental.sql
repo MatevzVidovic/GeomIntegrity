@@ -99,6 +99,17 @@ SELECT pg_temp.assert_true(
     'Deleting center obm should create exactly one hole'
 );
 
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*)
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='version')
+          AND tip_topoloskega_problema = 'luknja'
+          AND kompaktnost IS NOT NULL
+    ) = 1,
+    'Incremental delete-created hole should have compactness'
+);
+
 \echo 'Case: INSERT splits a hole into two'
 INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
 VALUES (
@@ -118,6 +129,17 @@ SELECT pg_temp.assert_true(
           AND tip_topoloskega_problema = 'luknja'
     ) = 2,
     'Inserting a strip through the hole should split it into two holes'
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*)
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='version')
+          AND tip_topoloskega_problema = 'luknja'
+          AND kompaktnost IS NOT NULL
+    ) = 2,
+    'Incremental insert-split holes should have compactness'
 );
 
 \echo 'Case: UPDATE fills split holes'

@@ -111,6 +111,7 @@ BEGIN
                 id_rel_geo_verzija,
                 povrsina,
                 obseg,
+                kompaktnost,
                 tip_topoloskega_problema
             )
             SELECT
@@ -120,7 +121,8 @@ BEGIN
                 hole_geom,
                 v_id_rel_geo_verzija,
                 ST_Area(hole_geom),
-           ST_Perimeter(hole_geom),
+                ST_Perimeter(hole_geom),
+                4*pi()*ST_Area(hole_geom) / NULLIF(ST_Perimeter(hole_geom) * ST_Perimeter(hole_geom), 0),
                 'luknja'
             FROM (SELECT (ST_Dump(v_hole_geom)).geom AS hole_geom) AS dump
             WHERE ST_Area(hole_geom) > 0;
@@ -222,6 +224,7 @@ BEGIN
             id_rel_geo_verzija,
             povrsina,
             obseg,
+            kompaktnost,
             tip_topoloskega_problema
         )
         SELECT
@@ -232,6 +235,7 @@ BEGIN
             v_id_rel_geo_verzija,
             ST_Area(hole_geom),
             ST_Perimeter(hole_geom),
+            4*pi()*ST_Area(hole_geom) / NULLIF(ST_Perimeter(hole_geom) * ST_Perimeter(hole_geom), 0),
             'luknja'
         FROM (SELECT st_reduceprecision((ST_Dump(v_insertion_hole_union_geom)).geom, 0.01) AS hole_geom) AS dump
         WHERE ST_Area(hole_geom) > 0;
@@ -257,7 +261,6 @@ CREATE TRIGGER trg_validate_topology_incremental
     BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
     FOR EACH ROW
     EXECUTE FUNCTION validate_topology_incremental();
-
 
 
 
