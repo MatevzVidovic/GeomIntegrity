@@ -585,18 +585,22 @@ BEGIN
         WHERE t.tgname = 'trg_validate_lao_tao_incremental' AND c.relname = 'md_geo_lao'
     ) INTO v_lao_tao_trigger_existed;
 
-    -- Drop hierarchy triggers so bulk validation is not slowed down
-    -- by incremental revalidation on every control-table write;
-    -- reinstate cleanly at the end.
-    IF v_obmxcona_trigger_existed THEN
-        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona';
-    END IF;
-    IF v_cona_lao_trigger_existed THEN
-        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona';
-    END IF;
-    IF v_lao_tao_trigger_existed THEN
-        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao';
-    END IF;
+    -- This dropping of triggers doesn't really make any sense.
+    -- When bulk validation is happening, rows are only being written to the kontrole table.
+    -- So these triggers would never get triggered anyway.
+
+    -- -- Drop hierarchy triggers so bulk validation is not slowed down
+    -- -- by incremental revalidation on every control-table write;
+    -- -- reinstate cleanly at the end.
+    -- IF v_obmxcona_trigger_existed THEN
+    --     EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona';
+    -- END IF;
+    -- IF v_cona_lao_trigger_existed THEN
+    --     EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona';
+    -- END IF;
+    -- IF v_lao_tao_trigger_existed THEN
+    --     EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao';
+    -- END IF;
 
     FOR v_model_version IN
         SELECT DISTINCT id
@@ -608,29 +612,29 @@ BEGIN
         FROM validate_all_hierarchy(v_model_version);
     END LOOP;
 
-    -- Reinstate only triggers that existed before AND whose functions are defined
-    -- (may not be the case when called from 00setup.sql before 98trigger_setups.sql runs)
-    IF v_obmxcona_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_obmxcona_incremental') THEN
-        EXECUTE '
-            CREATE TRIGGER trg_validate_obmxcona_incremental
-            AFTER INSERT OR UPDATE OR DELETE ON md_geo_obmxcona
-            FOR EACH ROW
-            EXECUTE FUNCTION validate_obmxcona_incremental()';
-    END IF;
-    IF v_cona_lao_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_cona_lao_incremental') THEN
-        EXECUTE '
-            CREATE TRIGGER trg_validate_cona_lao_incremental
-            AFTER INSERT OR UPDATE OF id_rel_geo_lao OR DELETE ON md_geo_cona
-            FOR EACH ROW
-            EXECUTE FUNCTION validate_cona_lao_incremental()';
-    END IF;
-    IF v_lao_tao_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_lao_tao_incremental') THEN
-        EXECUTE '
-            CREATE TRIGGER trg_validate_lao_tao_incremental
-            AFTER INSERT OR UPDATE OF id_rel_geo_tao OR DELETE ON md_geo_lao
-            FOR EACH ROW
-            EXECUTE FUNCTION validate_lao_tao_incremental()';
-    END IF;
+    -- -- Reinstate only triggers that existed before AND whose functions are defined
+    -- -- (may not be the case when called from 00setup.sql before 98trigger_setups.sql runs)
+    -- IF v_obmxcona_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_obmxcona_incremental') THEN
+    --     EXECUTE '
+    --         CREATE TRIGGER trg_validate_obmxcona_incremental
+    --         AFTER INSERT OR UPDATE OR DELETE ON md_geo_obmxcona
+    --         FOR EACH ROW
+    --         EXECUTE FUNCTION validate_obmxcona_incremental()';
+    -- END IF;
+    -- IF v_cona_lao_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_cona_lao_incremental') THEN
+    --     EXECUTE '
+    --         CREATE TRIGGER trg_validate_cona_lao_incremental
+    --         AFTER INSERT OR UPDATE OF id_rel_geo_lao OR DELETE ON md_geo_cona
+    --         FOR EACH ROW
+    --         EXECUTE FUNCTION validate_cona_lao_incremental()';
+    -- END IF;
+    -- IF v_lao_tao_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_lao_tao_incremental') THEN
+    --     EXECUTE '
+    --         CREATE TRIGGER trg_validate_lao_tao_incremental
+    --         AFTER INSERT OR UPDATE OF id_rel_geo_tao OR DELETE ON md_geo_lao
+    --         FOR EACH ROW
+    --         EXECUTE FUNCTION validate_lao_tao_incremental()';
+    -- END IF;
 END;
 $$;
 

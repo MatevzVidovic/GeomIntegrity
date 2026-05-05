@@ -1,86 +1,218 @@
-# Hierarchy Triggers
+# Hierarchy Trigger Map
 
-This is the shortest useful map of how the hierarchy validation chain works and where the deadlock came from.
+This explains what calls what in the hierarchy validation system.
 
-## 1) Normal incremental path
-
-```mermaid
-flowchart TD
-    A["md_geo_obmxcona row change"] --> B["trg_validate_obmxcona_incremental"]
-    B --> C["validate_obmxcona_incremental"]
-    C --> D["find affected model version(s)"]
-    D --> E["validate_all_hierarchy"]
-    E --> F["validate_cona_hierarchy"]
-    E --> G["validate_lao_hierarchy"]
-    E --> H["validate_tao_hierarchy"]
-    F --> I["md_topoloske_kontrole_hierarhija"]
-    G --> I
-    H --> I
-```
-
-- `trg_validate_obmxcona_incremental` is the row trigger on `md_geo_obmxcona`.
-- `validate_obmxcona_incremental()` is the trigger function.
-- It decides which model version is affected, then calls `validate_all_hierarchy(uuid)`.
-- The validation functions write problem rows into `md_topoloske_kontrole_hierarhija`.
-
-## 2) What used to happen
+The hierarchy is:
 
 ```mermaid
 flowchart TD
-    A["md_geo_obmxcona row change"] --> B["trg_validate_obmxcona_incremental"]
-    B --> C["validate_obmxcona_incremental"]
-    C --> D["validate_all_hierarchy"]
-    D --> E["DROP TRIGGER on md_geo_obmxcona"]
-    D --> F["run validation queries"]
-    D --> G["CREATE TRIGGER on md_geo_obmxcona"]
+    OBM["md_geo_obm"]
+    XCO["md_geo_obmxcona"]
+    CONA["md_geo_cona"]
+    LAO["md_geo_lao"]
+    TAO["md_geo_tao"]
+
+    OBM --> XCO
+    XCO --> CONA
+    CONA --> LAO
+    LAO --> TAO
 ```
 
-- The problem was not the row trigger itself.
-- The problem was `validate_all_hierarchy(uuid)` doing `DROP TRIGGER` and `CREATE TRIGGER` inside a trigger-driven update.
-- That is DDL inside normal DML, which is where the lock conflict came from.
+Validation results go into `md_topoloske_kontrole_hierarhija`.
 
-## 3) Bulk path
+## Main Pieces
 
 ```mermaid
 flowchart TD
-    A["validate_all_hierarchies"] --> B["drop incremental triggers once"]
-    B --> C["loop all model versions"]
-    C --> D["validate_all_hierarchy"]
-    D --> E["validation only"]
-    C --> F["recreate incremental triggers once"]
+    T1["trg_validate_obmxcona_incremental"]
+    T2["trg_validate_cona_lao_incremental"]
+    T3["trg_validate_lao_tao_incremental"]
+
+    F1["validate_obmxcona_incremental"]
+    F2["validate_cona_lao_incremental"]
+    F3["validate_lao_tao_incremental"]
+
+    ALL["validate_all_hierarchy"]
+    CONA["validate_cona_hierarchy"]
+    LAO["validate_lao_hierarchy"]
+    TAO["validate_tao_hierarchy"]
+    OUT["md_topoloske_kontrole_hierarhija"]
+
+    T1 --> F1
+    T2 --> F2
+    T3 --> F3
+
+    F1 --> ALL
+    F2 --> ALL
+    F3 --> ALL
+
+    ALL --> CONA
+    ALL --> LAO
+    ALL --> TAO
+
+    CONA --> OUT
+    LAO --> OUT
+    TAO --> OUT
 ```
 
-- `validate_all_hierarchies()` is the explicit bulk wrapper.
-- This is the only place where trigger suppression makes sense.
-- `validate_all_hierarchy(uuid)` now stays pure and does not manage triggers.
+Short version:
 
-## 4) Why it deadlocked
+- Row triggers only decide when validation should run.
+- Incremental trigger functions find the affected model version.
+- `validate_all_hierarchy` runs all checks for one model version.
+- The three lower validation functions delete and rewrite problem rows.
+
+## Obm To Cona Changes
+
+This path runs when `md_geo_obmxcona` changes.
 
 ```mermaid
-sequenceDiagram
-    participant U1 as Session A
-    participant U2 as Session B
-    participant DB as PostgreSQL
+flowchart TD
+    A["INSERT UPDATE DELETE on md_geo_obmxcona"]
+    B["trg_validate_obmxcona_incremental"]
+    C["validate_obmxcona_incremental"]
+    D["read old cona model version"]
+    E["read new cona model version"]
+    F["validate_all_hierarchy for old version"]
+    G["validate_all_hierarchy for new version when different"]
 
-    U1->>DB: UPDATE md_geo_obmxcona
-    DB->>DB: fire trg_validate_obmxcona_incremental
-    DB->>DB: call validate_obmxcona_incremental
-    DB->>DB: call validate_all_hierarchy
-    DB->>DB: try DROP TRIGGER
-
-    U2->>DB: UPDATE md_geo_obmxcona
-    DB->>DB: fire trg_validate_obmxcona_incremental
-    DB->>DB: call validate_obmxcona_incremental
-    DB->>DB: call validate_all_hierarchy
-    DB->>DB: try DROP TRIGGER
+    A --> B
+    B --> C
+    C --> D
+    C --> E
+    D --> F
+    E --> G
 ```
 
-- Each session was holding row-update locks and then asking for stronger trigger DDL locks.
-- Two sessions doing that in different order can deadlock.
-- The fix was to remove trigger DDL from `validate_all_hierarchy(uuid)`.
+Why it needs a lookup:
 
-## 5) Mental model
+- `md_geo_obmxcona` has `id_rel_geo_cona`.
+- The model version lives on `md_geo_cona.id_rel_verzije_modeli`.
+- So this trigger function joins through `md_geo_cona`.
 
-- Incremental trigger: keep hierarchy status current after one row change.
-- Bulk wrapper: temporarily disable triggers while validating everything.
-- Validation function: compute problems only, no trigger DDL.
+## Cona To Lao Changes
+
+This path runs when a cona is added, deleted, or moved to another LAO.
+
+```mermaid
+flowchart TD
+    A["INSERT DELETE or id_rel_geo_lao UPDATE on md_geo_cona"]
+    B["trg_validate_cona_lao_incremental"]
+    C["validate_cona_lao_incremental"]
+    D["use md_geo_cona.id_rel_verzije_modeli"]
+    E["validate_all_hierarchy"]
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+```
+
+Why it is simpler:
+
+- `md_geo_cona` already has `id_rel_verzije_modeli`.
+- No join is needed to find the affected model version.
+
+## Lao To Tao Changes
+
+This path runs when a LAO is added, deleted, or moved to another TAO.
+
+```mermaid
+flowchart TD
+    A["INSERT DELETE or id_rel_geo_tao UPDATE on md_geo_lao"]
+    B["trg_validate_lao_tao_incremental"]
+    C["validate_lao_tao_incremental"]
+    D["use md_geo_lao.id_rel_verzije_modeli"]
+    E["validate_all_hierarchy"]
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+```
+
+Why it is simpler:
+
+- `md_geo_lao` already has `id_rel_verzije_modeli`.
+- No join is needed to find the affected model version.
+
+## One Model Version Validation
+
+`validate_all_hierarchy` validates one `id_rel_verzije_modeli`.
+
+```mermaid
+flowchart TD
+    A["validate_all_hierarchy"]
+    B["validate_cona_hierarchy"]
+    C["validate_lao_hierarchy"]
+    D["validate_tao_hierarchy"]
+    OUT["md_topoloske_kontrole_hierarhija"]
+
+    A --> B
+    A --> C
+    A --> D
+    B --> OUT
+    C --> OUT
+    D --> OUT
+```
+
+What each function checks:
+
+- `validate_cona_hierarchy`: OBMs missing conas, bad OBM references, bad cona references, empty conas.
+- `validate_lao_hierarchy`: conas missing LAO, bad LAO references, empty LAOs.
+- `validate_tao_hierarchy`: LAOs missing TAO, bad TAO references, empty TAOs.
+
+Each lower function first clears its own old problem rows for that model version, then inserts the current problems.
+
+## Full Bulk Validation
+
+`validate_all_hierarchies` validates every model version.
+
+```mermaid
+flowchart TD
+    A["validate_all_hierarchies"]
+    B["remember which incremental triggers exist"]
+    C["drop incremental triggers once"]
+    D["loop md_verzije_modeli"]
+    E["validate_all_hierarchy for each model version"]
+    F["recreate triggers that existed before"]
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> D
+    D --> F
+```
+
+This is the only hierarchy validation function that should do trigger DDL.
+
+Reason:
+
+- Bulk validation deliberately touches many model versions.
+- Dropping triggers once avoids repeated incremental revalidation during a full rebuild.
+- The single-version function must stay normal DML only, because row triggers call it.
+
+## Current Rule
+
+```mermaid
+flowchart TD
+    A["row trigger path"]
+    B["validate_all_hierarchy"]
+    C["validation only"]
+    D["bulk path"]
+    E["validate_all_hierarchies"]
+    F["may drop and recreate triggers"]
+
+    A --> B
+    B --> C
+    D --> E
+    E --> F
+```
+
+Keep this split:
+
+- Incremental path: trigger function calls `validate_all_hierarchy`.
+- Single-version validation: no `DROP TRIGGER`, no `CREATE TRIGGER`.
+- Bulk validation: `validate_all_hierarchies` may manage triggers around the full loop.
+
