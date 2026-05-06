@@ -6,7 +6,7 @@ Integrated automatic rollback functionality into the test script to ensure **100
 
 ## Files Modified
 
-### 1. Main/99test_full_system.sql
+### 1. Main/8_0_test_full_system.sql
 **Changes**:
 - Added `BEGIN;` transaction at the start of the script
 - Added `ROLLBACK;` at the end of the script
@@ -18,7 +18,7 @@ Integrated automatic rollback functionality into the test script to ensure **100
 ### 2. AgentDocs/CONTEXT.md
 **Changes**:
 - Added new "Testing" section
-- Documented 99test_full_system.sql functionality
+- Documented 8_0_test_full_system.sql functionality
 - Explained PostgreSQL's transactional DDL support
 - Listed what gets rolled back
 
@@ -32,7 +32,7 @@ Integrated automatic rollback functionality into the test script to ensure **100
 
 ## Safety Guarantees
 
-When you run `\i Main/99test_full_system.sql`, PostgreSQL will automatically roll back:
+When you run `\i Main/8_0_test_full_system.sql`, PostgreSQL will automatically roll back:
 
 ✅ **All DML Operations**:
 - All INSERT statements (test data creation)
@@ -56,13 +56,13 @@ When you run `\i Main/99test_full_system.sql`, PostgreSQL will automatically rol
 ### Before (Manual Transaction):
 ```sql
 BEGIN;
-\i Main/99test_full_system.sql
+\i Main/8_0_test_full_system.sql
 ROLLBACK;  -- Had to remember this!
 ```
 
 ### Now (Automatic):
 ```sql
-\i Main/99test_full_system.sql
+\i Main/8_0_test_full_system.sql
 -- Rollback happens automatically!
 ```
 

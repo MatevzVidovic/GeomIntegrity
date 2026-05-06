@@ -4,12 +4,12 @@ All SQL files have been updated with Slovene column names and the simplified hie
 
 ## Files Updated:
 
-1. ✅ **Main/00setup.sql** - Setup script with new schema
-2. ✅ **Main/3checkAllTopologies.sql** - OBM validation functions
-3. ✅ **Main/5trigger.sql** - OBM incremental trigger
-4. ✅ **Main/6validateHierarchy.sql** - Hierarchy validation functions
-5. ✅ **Main/7triggerHierarchy.sql** - Hierarchy incremental triggers
-6. ✅ **Main/99test_full_system.sql** - Test suite
+1. ✅ **Main/1_0_setup.sql** - Setup script with new schema
+2. ✅ **Main/2_0_fn_obm_geom_check_all.sql** - OBM validation functions
+3. ✅ **Main/2_1_trg_obm_geom_trigger.sql** - OBM incremental trigger
+4. ✅ **Main/3_0_fn_hierarchy_check_all.sql** - Hierarchy validation functions
+5. ✅ **Main/3_1_trg_hierarchy_triggers.sql** - Hierarchy incremental triggers
+6. ✅ **Main/8_0_test_full_system.sql** - Test suite
 
 ## Schema Changes:
 
@@ -37,20 +37,20 @@ All SQL files now:
 
 ## Next Steps:
 
-1. Create the tables in Lift using the schemas in `00setup.sql`
-2. Run `\i Main/00setup.sql` to set up indexes and constraints
+1. Create the tables in Lift using the schemas in `1_0_setup.sql`
+2. Run `\i Main/1_0_setup.sql` to set up indexes and constraints
 3. Load validation functions:
-   - `\i Main/1make2decimalPlaces.sql`
-   - `\i Main/3checkAllTopologies.sql`
-   - `\i Main/6validateHierarchy.sql`
+   - `\i Main/1_1_fn_coerce_2_decimal_places.sql`
+   - `\i Main/2_0_fn_obm_geom_check_all.sql`
+   - `\i Main/3_0_fn_hierarchy_check_all.sql`
 4. Run initial validation:
    - `SELECT * FROM validate_all_topologies();`
    - `SELECT * FROM validate_all_hierarchies();`
 5. Enable triggers:
-   - `\i Main/5trigger.sql`
-   - `\i Main/7triggerHierarchy.sql`
+   - `\i Main/2_1_trg_obm_geom_trigger.sql`
+   - `\i Main/3_1_trg_hierarchy_triggers.sql`
 6. Test everything:
-   - `\i Main/99test_full_system.sql`
+   - `\i Main/8_0_test_full_system.sql`
 
 ## Documentation:
 

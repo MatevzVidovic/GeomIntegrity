@@ -396,7 +396,7 @@ BEGIN
     END LOOP;
 
     -- Reinstate trigger only if it existed before AND its function is defined
-    -- (may not be the case when called from 00setup.sql before 98trigger_setups.sql runs)
+    -- (may not be the case when called from 1_0_setup.sql before 1_2_trigger_setups.sql runs)
     IF v_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_topology_incremental') THEN
         EXECUTE '
             CREATE TRIGGER trg_validate_topology_incremental

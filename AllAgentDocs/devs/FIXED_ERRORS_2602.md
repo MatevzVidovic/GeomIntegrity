@@ -5,7 +5,7 @@ Ta dokument povzema konkretne napake, ki so bile odkrite in popravljene med raz�
 ## 1) `validate_all(uuid)` je vra훾al napa훾en tip vrstice pri prazni verziji
 
 Lokacija:
-- `Main/3checkAllTopologies.sql`
+- `Main/2_0_fn_obm_geom_check_all.sql`
 
 Simptom:
 - Pri verziji brez OBM zapisov je funkcija vrnila vrstico napa훾ne oblike (`SELECT 0, 0, 0, 0`),
@@ -22,7 +22,7 @@ U훾inek:
 ## 2) `validate_obmxcona_incremental()` na UPDATE ni ponovno validiral obeh prizadetih modelov
 
 Lokacija:
-- `Main/7triggerHierarchy.sql`
+- `Main/3_1_trg_hierarchy_triggers.sql`
 
 Simptom:
 - Pri `UPDATE md_geo_obmxcona` se je validiral samo en model (tipi훾no "novi"),

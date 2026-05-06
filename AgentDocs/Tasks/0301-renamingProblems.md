@@ -14,7 +14,7 @@ This is the 3rd task. The first 2 have been completed and are described in next 
 
 Current task: 
 
-First thing: our tests in AgentTests/ and in 99test_full_system require interaction, which is a probem, because when you run them, you then hang forever. They need interaction multiple times, where we need to press qfor the tests to continue.
+First thing: our tests in AgentTests/ and in 8_0_test_full_system require interaction, which is a probem, because when you run them, you then hang forever. They need interaction multiple times, where we need to press qfor the tests to continue.
 YOu absolutely have to eliminate this by somehow making it noninteractive so that you can run the tests.
 
 You have actually added the trigger removal and addition to the wrong fns
@@ -59,9 +59,9 @@ Actually, can you fix your commit like this pls:
   - make another file 98_trigger_setups where you set up the triggers
 
 
-  Then in 00setup, right after dropping triggers at top, do load fns
+  Then in 1_0_setup, right after dropping triggers at top, do load fns
 
-  And only at the end of 00setup, zou do the activation of triggers
+  And only at the end of 1_0_setup, zou do the activation of triggers
 
   This way the validate_all fns dont suffer from managing triggers on every insert
 

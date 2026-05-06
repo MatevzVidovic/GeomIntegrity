@@ -1,5 +1,5 @@
 -- ============================================================================
--- 00setup.sql - GeomIntegrity Setup Script
+-- 1_0_setup.sql - GeomIntegrity Setup Script
 -- ============================================================================
 -- This script sets up the topology validation system for obmocja (OBM).
 -- Run this ONCE to initialize the system.
@@ -26,9 +26,9 @@
 --     Possibly uncomment the part in this script about 2_decimal_places
 --     (btw: its nice that in this script we drop the triggers beforehand, so things are quicker)
 
--- \i /Users/matevzvidovic/GeomIntegrity/Main/00setup.sql
+-- \i /Users/matevzvidovic/GeomIntegrity/Main/1_0_setup.sql
 
--- \i /Users/matevzvidovic/GeomIntegrity/Main/99test_full_system.sql
+-- \i /Users/matevzvidovic/GeomIntegrity/Main/8_0_test_full_system.sql
 --
 
 \pset pager off
@@ -71,7 +71,7 @@ DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao;
 
 -- Load function definitions immediately after disabling triggers,
 -- so validation functions below can be called without stale DB definitions.
-\i /Users/matevzvidovic/GeomIntegrity/Main/97load_fns.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/1_2_load_fns.sql
 
 
 -- ============================================================================
@@ -272,7 +272,7 @@ SELECT * FROM validate_all_hierarchies();
 -- ============================================================================
 -- Trigger functions and triggers are created here, after all validation has run,
 -- so the initial bulk validation above is not slowed down by per-row trigger calls.
-\i /Users/matevzvidovic/GeomIntegrity/Main/98trigger_setups.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/1_2_trigger_setups.sql
 
 
 -- ============================================================================

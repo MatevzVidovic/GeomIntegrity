@@ -10,7 +10,7 @@
 BEGIN;
 SET LOCAL client_min_messages TO WARNING;
 \cd Main
-\i /Users/matevzvidovic/GeomIntegrity/Main/99load_fns_and_triggers.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/8_1_load_fns_and_triggers.sql
 \cd ..
 
 CREATE OR REPLACE FUNCTION pg_temp.assert_true(p_condition boolean, p_message text)
@@ -85,7 +85,7 @@ VALUES
 
 SELECT * FROM validate_all((SELECT value FROM agent_ids WHERE key='version'));
 
-\i /Users/matevzvidovic/GeomIntegrity/Main/5trigger.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/2_1_trg_obm_geom_trigger.sql
 
 \echo 'Case: DELETE creates one hole'
 DELETE FROM md_geo_obm WHERE id = (SELECT value FROM agent_ids WHERE key='obm5');

@@ -10,7 +10,7 @@
 BEGIN;
 SET LOCAL client_min_messages TO WARNING;
 \cd Main
-\i /Users/matevzvidovic/GeomIntegrity/Main/99load_fns_and_triggers.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/8_1_load_fns_and_triggers.sql
 \cd ..
 
 CREATE OR REPLACE FUNCTION pg_temp.assert_true(p_condition boolean, p_message text)

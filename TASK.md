@@ -14,7 +14,7 @@ Then go do this without stopping:
 
 
 We want to change our system
-  First make sure that 00setup actually looks good and is clear
+  First make sure that 1_0_setup actually looks good and is clear
 
   In the new version we want to have topoloske_kontrole_obm instead of topoloske kontrole, where we check the
   validity of obmocja like we do here (this also means we dont need the column filled with obm anymore)

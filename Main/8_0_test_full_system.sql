@@ -1,5 +1,5 @@
 -- ============================================================================
--- 99test_full_system.sql - Comprehensive Test Suite
+-- 8_0_test_full_system.sql - Comprehensive Test Suite
 -- ============================================================================
 -- This test creates a simple test model with:
 -- - 9 OBMs in a 3x3 grid
@@ -9,7 +9,7 @@
 --
 -- IMPORTANT: Run this from the Main directory:
 --   \cd /path/to/GeomIntegrity/Main
---   \i /Users/matevzvidovic/GeomIntegrity/Main/99test_full_system.sql
+--   \i /Users/matevzvidovic/GeomIntegrity/Main/8_0_test_full_system.sql
 --
 -- TRANSACTION SAFETY:
 -- This script runs in a transaction and automatically rolls back at the end.
@@ -311,8 +311,8 @@ ORDER BY tip_entitete, tip_problema;
 -- ============================================================================
 \echo ''
 \echo '[7/12] Re-enabling triggers...'
-\i /Users/matevzvidovic/GeomIntegrity/Main/5trigger.sql
-\i /Users/matevzvidovic/GeomIntegrity/Main/7triggerHierarchy.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/2_1_trg_obm_geom_trigger.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/3_1_trg_hierarchy_triggers.sql
 \echo '   Done: Triggers enabled'
 
 

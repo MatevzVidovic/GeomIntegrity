@@ -40,7 +40,7 @@ PostgreSQL supports **transactional DDL**, making it unique among databases. Thi
 - ❌ `ANALYZE` - Can be in transaction but changes are visible immediately
 - ⚠️ `CREATE INDEX CONCURRENTLY` - Cannot run in a transaction
 
-## Your Test Script (99test_full_system.sql) - Completely Safe! 🎉
+## Your Test Script (8_0_test_full_system.sql) - Completely Safe! 🎉
 
 Everything in your test script is rollback-able:
 

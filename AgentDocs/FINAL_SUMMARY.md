@@ -3,27 +3,27 @@
 ## What Was Done
 
 ### 1. ✅ Automatic Rollback in Tests
-**File**: `Main/99test_full_system.sql`
+**File**: `Main/8_0_test_full_system.sql`
 - Added `BEGIN;` and `ROLLBACK;` wrapper
 - Tests now automatically undo ALL changes
 - Safe to run as many times as you want
 
 ### 2. ✅ Function Loader Script
-**File**: `Main/98load_all_functions.sql`
+**File**: `Main/8_1_load_fns_and_triggers.sql`
 
 **Loads only active files (1, 3, 5, 6, 7):**
-1. `1make2decimalPlaces.sql` - Precision functions
-2. `3checkAllTopologies.sql` - OBM validation
-3. `5trigger.sql` - OBM trigger
-4. `6validateHierarchy.sql` - Hierarchy validation
-5. `7triggerHierarchy.sql` - Hierarchy triggers
+1. `1_1_fn_coerce_2_decimal_places.sql` - Precision functions
+2. `2_0_fn_obm_geom_check_all.sql` - OBM validation
+3. `2_1_trg_obm_geom_trigger.sql` - OBM trigger
+4. `3_0_fn_hierarchy_check_all.sql` - Hierarchy validation
+5. `3_1_trg_hierarchy_triggers.sql` - Hierarchy triggers
 
 **Does NOT load deprecated files (files with `-` prefix):**
 - ❌ `-0simplify_polygons.sql` - Old simplification (deprecated)
 - ❌ `-2topologyFixer.sql` - Old fixer (deprecated)
 - ❌ `-4checkAllTopologiesWithSimplified.sql` - Old validation (deprecated)
 
-### 3. ✅ Fixed Critical Bugs in 5trigger.sql
+### 3. ✅ Fixed Critical Bugs in 2_1_trg_obm_geom_trigger.sql
 **Problems found:**
 - Referenced non-existent column `area_type`
 - Used English names `area`, `perimeter` instead of Slovene
@@ -41,11 +41,11 @@ All docs updated to reflect that `-` prefix files are deprecated and not loaded.
 ## Active Files (Loaded by 98)
 
 ```
-1make2decimalPlaces.sql      ✅ ACTIVE
-3checkAllTopologies.sql      ✅ ACTIVE
-5trigger.sql                 ✅ ACTIVE (FIXED!)
-6validateHierarchy.sql       ✅ ACTIVE
-7triggerHierarchy.sql        ✅ ACTIVE
+1_1_fn_coerce_2_decimal_places.sql      ✅ ACTIVE
+2_0_fn_obm_geom_check_all.sql      ✅ ACTIVE
+2_1_trg_obm_geom_trigger.sql                 ✅ ACTIVE (FIXED!)
+3_0_fn_hierarchy_check_all.sql       ✅ ACTIVE
+3_1_trg_hierarchy_triggers.sql        ✅ ACTIVE
 ```
 
 ## Deprecated Files (NOT Loaded)
@@ -60,14 +60,14 @@ All docs updated to reflect that `-` prefix files are deprecated and not loaded.
 
 ```sql
 -- First time:
-\i Main/00setup.sql                  -- Create tables
-\i Main/98load_all_functions.sql     -- Load functions (1,3,5,6,7)
+\i Main/1_0_setup.sql                  -- Create tables
+\i Main/8_1_load_fns_and_triggers.sql     -- Load functions (1,3,5,6,7)
 SELECT * FROM validate_all_topologies();
-\i Main/99test_full_system.sql       -- Test (auto-rollback!)
+\i Main/8_0_test_full_system.sql       -- Test (auto-rollback!)
 
 -- After editing any file (1,3,5,6,7):
-\i Main/98load_all_functions.sql     -- Reload
-\i Main/99test_full_system.sql       -- Test (auto-rollback!)
+\i Main/8_1_load_fns_and_triggers.sql     -- Reload
+\i Main/8_0_test_full_system.sql       -- Test (auto-rollback!)
 ```
 
 ## Why `-` Prefix Files Are Excluded
@@ -84,7 +84,7 @@ The 98 script only loads the clean, active files that make up your production sy
 
 ✅ Rollback integration - Tests automatically roll back
 ✅ Function loader - Loads only active files (1,3,5,6,7)
-✅ Bug fixes - Fixed column names in 5trigger.sql
+✅ Bug fixes - Fixed column names in 2_1_trg_obm_geom_trigger.sql
 ✅ No loose snippets - All code properly organized
 ✅ Documentation - Updated to exclude deprecated files
 

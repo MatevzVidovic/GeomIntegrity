@@ -15,7 +15,7 @@ All tests run in transactions and end with `ROLLBACK`.
 
 ## Why This Was Added
 
-`Main/99test_full_system.sql` is useful but only covers a narrow scenario chain.
+`Main/8_0_test_full_system.sql` is useful but only covers a narrow scenario chain.
 The new suite validates all major function/trigger branches and all hierarchy problem types with fail-fast assertions.
 
 ## How It Works
@@ -37,7 +37,7 @@ Each SQL test script:
 - starts with `BEGIN;`
 - reloads latest SQL definitions via:
   - `\cd Main`
-  - `\i 98load_all_functions.sql`
+  - `\i 8_1_load_fns_and_triggers.sql`
   - `\cd ..`
 - defines `pg_temp.assert_true(...)` helper
 - creates isolated random UUID fixtures
@@ -109,7 +109,7 @@ Hierarchy full validators:
 ## Fix 1: `validate_all(uuid)` empty-version return row shape
 
 File:
-- `Main/3checkAllTopologies.sql`
+- `Main/2_0_fn_obm_geom_check_all.sql`
 
 Issue:
 - Empty-version branch returned wrong column structure/types.
@@ -121,7 +121,7 @@ Fix:
 ## Fix 2: `validate_obmxcona_incremental()` UPDATE scope
 
 File:
-- `Main/7triggerHierarchy.sql`
+- `Main/3_1_trg_hierarchy_triggers.sql`
 
 Issue:
 - On `UPDATE`, only one model version was revalidated.

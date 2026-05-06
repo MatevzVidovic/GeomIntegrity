@@ -1,6 +1,6 @@
 # Changes Summary
 
-## Updates to 00setup.sql
+## Updates to 1_0_setup.sql
 
 ### Key Changes:
 
@@ -56,7 +56,7 @@ PostGIS and most backends (like Lift) automatically create GIST spatial indexes 
 ### Query Indexes
 The non-geometry indexes (`idx_topoloske_kontrole_obm_query` and `idx_topoloske_kontrole_hierarhija_query`) should be safe to create as they don't duplicate backend-generated indexes.
 
-## Test File: 99test_full_system.sql
+## Test File: 8_0_test_full_system.sql
 
 Created comprehensive test suite that:
 - Creates a 3x3 grid of OBMs (9 total)
@@ -65,4 +65,4 @@ Created comprehensive test suite that:
 - Tests all triggers (geometric and hierarchy)
 - Cleans up after itself
 
-Run with: `\i Main/99test_full_system.sql`
+Run with: `\i Main/8_0_test_full_system.sql`

@@ -144,7 +144,7 @@ DROP FUNCTION IF EXISTS validate_obmxcona_incremental() CASCADE;
   DROP FUNCTION IF EXISTS validate_all_topologies();
 
 
-\i /Users/matevzvidovic/GeomIntegrity/Main/99load_fns_and_triggers.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/8_1_load_fns_and_triggers.sql
 
 SELECT * FROM validate_all_topologies();
 
@@ -152,7 +152,7 @@ SELECT * FROM validate_all_hierarchies();
 
 
 
--- 1make2decimalPlaces
+-- 1_1_fn_coerce_2_decimal_places
 
 
 SELECT PostGIS_Full_Version();

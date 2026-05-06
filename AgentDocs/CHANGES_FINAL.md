@@ -20,10 +20,10 @@
 | overflow | **preliv** | Area extending beyond boundary |
 
 **Updated in all files**:
-- ✅ 00setup.sql (constraint)
-- ✅ 3checkAllTopologies.sql (all INSERT statements)
-- ✅ 5trigger.sql (all INSERT and DELETE statements)
-- ✅ 99test_full_system.sql (all queries)
+- ✅ 1_0_setup.sql (constraint)
+- ✅ 2_0_fn_obm_geom_check_all.sql (all INSERT statements)
+- ✅ 2_1_trg_obm_geom_trigger.sql (all INSERT and DELETE statements)
+- ✅ 8_0_test_full_system.sql (all queries)
 
 ## Final Schema: md_topoloske_kontrole_obm
 

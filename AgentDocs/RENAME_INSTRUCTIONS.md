@@ -81,12 +81,12 @@ ALTER INDEX IF EXISTS idx_topoloske_kontrole_hierarhija_query
 
 All files in `Main/`:
 - ✅ `00a_rename_columns_to_slovene.sql` (migration script, already has Slovene names)
-- ❌ `00setup.sql` (needs find-replace)
-- ❌ `3checkAllTopologies.sql` (needs find-replace)
-- ❌ `5trigger.sql` (needs find-replace)
-- ❌ `6validateHierarchy.sql` (needs find-replace)
-- ❌ `7triggerHierarchy.sql` (needs find-replace)
-- ❌ `99test_full_system.sql` (needs find-replace)
+- ❌ `1_0_setup.sql` (needs find-replace)
+- ❌ `2_0_fn_obm_geom_check_all.sql` (needs find-replace)
+- ❌ `2_1_trg_obm_geom_trigger.sql` (needs find-replace)
+- ❌ `3_0_fn_hierarchy_check_all.sql` (needs find-replace)
+- ❌ `3_1_trg_hierarchy_triggers.sql` (needs find-replace)
+- ❌ `8_0_test_full_system.sql` (needs find-replace)
 
 ## Alternative: Let Me Create Updated Files
 

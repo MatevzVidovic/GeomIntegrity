@@ -1,5 +1,5 @@
 -- ============================================================================
--- 6validateHierarchy.sql - Cona/Lao/Tao Hierarchy Validation
+-- 3_0_fn_hierarchy_check_all.sql - Cona/Lao/Tao Hierarchy Validation
 -- ============================================================================
 -- This file contains validation functions for the hierarchy above OBM:
 --   - Cona: must contain exactly the OBMs assigned to it via obmxcona
@@ -613,7 +613,7 @@ BEGIN
     END LOOP;
 
     -- -- Reinstate only triggers that existed before AND whose functions are defined
-    -- -- (may not be the case when called from 00setup.sql before 98trigger_setups.sql runs)
+    -- -- (may not be the case when called from 1_0_setup.sql before 1_2_trigger_setups.sql runs)
     -- IF v_obmxcona_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_obmxcona_incremental') THEN
     --     EXECUTE '
     --         CREATE TRIGGER trg_validate_obmxcona_incremental

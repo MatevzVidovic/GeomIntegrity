@@ -100,14 +100,14 @@ Stores **ID-based** hierarchy problems for cona/lao/tao:
 
 ```
 Main/
-├── 00setup.sql                     - Initial setup (tables, indexes, constraints)
-├── 1make2decimalPlaces.sql         - Precision functions
-├── 3checkAllTopologies.sql         - OBM full validation functions
-├── 5trigger.sql                    - OBM incremental trigger
-├── 6validateHierarchy.sql          - Cona/Lao/Tao full validation functions
-├── 7triggerHierarchy.sql           - Cona/Lao/Tao incremental triggers
-├── 98load_all_functions.sql        - Load all functions (1,3,5,6,7) in correct order
-├── 99test_full_system.sql          - Comprehensive test suite (auto-rollback)
+├── 1_0_setup.sql                     - Initial setup (tables, indexes, constraints)
+├── 1_1_fn_coerce_2_decimal_places.sql         - Precision functions
+├── 2_0_fn_obm_geom_check_all.sql         - OBM full validation functions
+├── 2_1_trg_obm_geom_trigger.sql                    - OBM incremental trigger
+├── 3_0_fn_hierarchy_check_all.sql          - Cona/Lao/Tao full validation functions
+├── 3_1_trg_hierarchy_triggers.sql           - Cona/Lao/Tao incremental triggers
+├── 8_1_load_fns_and_triggers.sql        - Load all functions (1,3,5,6,7) in correct order
+├── 8_0_test_full_system.sql          - Comprehensive test suite (auto-rollback)
 ├── -0simplify_polygons.sql         - OLD: Polygon simplification (deprecated)
 ├── -2topologyFixer.sql             - OLD: Fix topology problems (deprecated)
 └── -4checkAllTopologiesWithSimplified.sql - OLD: Validation (deprecated)
@@ -116,21 +116,21 @@ ignore_me/                          - Old/unused files
 AgentTests/                         - Comprehensive rollback-safe test suites
 Makefile                            - Includes `make test-agent` command
 
-Note: Files with '-' prefix are deprecated and not loaded by 98load_all_functions.sql
+Note: Files with '-' prefix are deprecated and not loaded by 8_1_load_fns_and_triggers.sql
 
 AgentDocs/
 ├── CONTEXT.md                      - This file
 ├── AGENT_TESTS_COMPREHENSIVE.md    - Detailed AgentTests coverage + fixes
 ├── FINAL_SCHEMA.md                 - Final table schemas (Slovene names)
 ├── CHANGES_FINAL.md                - Summary of changes made
-├── 98_LOADER_INFO.md               - Documentation for 98load_all_functions.sql
+├── 98_LOADER_INFO.md               - Documentation for 8_1_load_fns_and_triggers.sql
 ├── ROLLBACK_INTEGRATION.md         - Rollback safety documentation
 └── POSTGRESQL_ROLLBACK.md          - PostgreSQL transaction capabilities
 ```
 
 ## OBM Topology Validation (Geometric)
 
-### Full Validation Functions (3checkAllTopologies.sql)
+### Full Validation Functions (2_0_fn_obm_geom_check_all.sql)
 - `validate_holes(uuid)` - Find uncovered areas within Slovenia boundary
 - `validate_overflows(uuid)` - Find areas extending beyond Slovenia boundary
 - `validate_intersections(uuid)` - Find overlapping obmocja
@@ -138,7 +138,7 @@ AgentDocs/
 - `validate_all_topologies()` - Run all validations for all versions
 - `validate_all(uuid)` returns a valid zero-count row for empty versions.
 
-### Incremental Trigger (5trigger.sql)
+### Incremental Trigger (2_1_trg_obm_geom_trigger.sql)
 - `validate_topology_incremental()` - Trigger function
 - `trg_validate_topology_incremental` - Fires on INSERT/UPDATE/DELETE of md_geo_obm
 - Updates holes and intersections incrementally
@@ -146,14 +146,14 @@ AgentDocs/
 
 ## Hierarchy Validation (ID-based)
 
-### Full Validation Functions (6validateHierarchy.sql)
+### Full Validation Functions (3_0_fn_hierarchy_check_all.sql)
 - `validate_cona_hierarchy(uuid)` - Validate OBM-Cona relationships
 - `validate_lao_hierarchy(uuid)` - Validate Cona-LAO relationships
 - `validate_tao_hierarchy(uuid)` - Validate LAO-TAO relationships
 - `validate_all_hierarchy(uuid)` - Run all hierarchy validations for a version
 - `validate_all_hierarchies()` - Run all hierarchy validations for all versions
 
-### Incremental Triggers (7triggerHierarchy.sql)
+### Incremental Triggers (3_1_trg_hierarchy_triggers.sql)
 - `validate_obmxcona_incremental()` - Fires on md_geo_obmxcona changes
 - `validate_cona_lao_incremental()` - Fires on md_geo_cona.id_rel_geo_lao changes
 - `validate_lao_tao_incremental()` - Fires on md_geo_lao.id_rel_geo_tao changes
@@ -181,13 +181,13 @@ AgentDocs/
 
 ### First Time Setup
 
-1. **Run setup script**: `\i Main/00setup.sql`
+1. **Run setup script**: `\i Main/1_0_setup.sql`
    - Creates tables (if not exists)
    - Creates indexes
    - Adds constraints
    - Initializes slo_meja boundary
 
-2. **Load all functions and triggers**: `\i Main/98load_all_functions.sql`
+2. **Load all functions and triggers**: `\i Main/8_1_load_fns_and_triggers.sql`
    - Loads all validation functions (scripts 1-7)
    - Creates all triggers
    - Done in correct dependency order
@@ -198,7 +198,7 @@ AgentDocs/
    SELECT * FROM validate_all_hierarchies();   -- Hierarchy relationships
    ```
 
-4. **Test the system**: `\i Main/99test_full_system.sql`
+4. **Test the system**: `\i Main/8_0_test_full_system.sql`
    - Comprehensive test suite
    - Automatically rolls back (safe to run)
 
@@ -213,14 +213,14 @@ AgentDocs/
 
 When you modify any SQL file (1-7):
 ```sql
-\i Main/98load_all_functions.sql
+\i Main/8_1_load_fns_and_triggers.sql
 ```
 
 This reloads all function definitions without affecting data or tables.
 
 ## Testing
 
-### 99test_full_system.sql
+### 8_0_test_full_system.sql
 **Purpose**: Comprehensive test suite that validates all system functionality
 
 **SAFETY**: This script automatically wraps everything in a transaction and rolls back at the end. Your database will **NOT** be modified. PostgreSQL supports transactional DDL, so even trigger changes are rolled back.
@@ -241,7 +241,7 @@ This reloads all function definitions without affecting data or tables.
 
 **Usage**: Just run it - rollback is automatic:
 ```sql
-\i Main/99test_full_system.sql
+\i Main/8_0_test_full_system.sql
 ```
 
 **What gets rolled back**:
@@ -275,10 +275,10 @@ PostgreSQL supports **transactional DDL**, which means:
 
 ## Manual Actions Needed
 
-1. **Replace 00setup.sql with 00setup_new.sql**:
+1. **Replace 1_0_setup.sql with 1_0_setup_new.sql**:
    ```bash
-   mv Main/00setup.sql Main/00setup_old.sql
-   mv Main/00setup_new.sql Main/00setup.sql
+   mv Main/1_0_setup.sql Main/1_0_setup_old.sql
+   mv Main/1_0_setup_new.sql Main/1_0_setup.sql
    ```
 
 2. **Rename table in database** (if needed):

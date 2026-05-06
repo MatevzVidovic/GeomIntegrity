@@ -1,5 +1,5 @@
 -- ============================================================================
--- 7triggerHierarchy.sql - Incremental Hierarchy Validation Triggers
+-- 3_1_trg_hierarchy_triggers.sql - Incremental Hierarchy Validation Triggers
 -- ============================================================================
 -- This file contains triggers for incremental validation of the hierarchy
 -- (cona/lao/tao relationships).

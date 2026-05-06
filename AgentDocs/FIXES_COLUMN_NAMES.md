@@ -1,13 +1,13 @@
-# Column Name Fixes in 5trigger.sql
+# Column Name Fixes in 2_1_trg_obm_geom_trigger.sql
 
 ## Issues Found
 
-When creating the 98load_all_functions.sql script, I discovered that **5trigger.sql** had several column references that weren't updated to the Slovene naming convention.
+When creating the 8_1_load_fns_and_triggers.sql script, I discovered that **2_1_trg_obm_geom_trigger.sql** had several column references that weren't updated to the Slovene naming convention.
 
 ## Problems
 
 ### 1. Non-existent Column: `area_type`
-**Location**: Two INSERT statements in 5trigger.sql
+**Location**: Two INSERT statements in 2_1_trg_obm_geom_trigger.sql
 **Issue**: Column `area_type` doesn't exist in `md_topoloske_kontrole_obm` schema
 **Used in**:
 - Line 161: INSERT INTO md_topoloske_kontrole_obm (... area_type ...)
@@ -101,14 +101,14 @@ ST_Perimeter(hole_geom),    -- PascalCase like other PostGIS functions
 ## Impact
 
 These fixes ensure that:
-1. ✅ 5trigger.sql uses only columns that exist in the schema
-2. ✅ All column names are in Slovene (consistent with 3checkAllTopologies.sql)
+1. ✅ 2_1_trg_obm_geom_trigger.sql uses only columns that exist in the schema
+2. ✅ All column names are in Slovene (consistent with 2_0_fn_obm_geom_check_all.sql)
 3. ✅ The trigger function will work correctly when loaded
 4. ✅ No runtime errors from missing columns
 
 ## Files Modified
 
-- **Main/5trigger.sql**: Fixed all column name references
+- **Main/2_1_trg_obm_geom_trigger.sql**: Fixed all column name references
 
 ## Verification
 
@@ -134,14 +134,14 @@ The issue went unnoticed because:
 3. These columns were buried in the middle of long INSERT statements
 4. The WHERE clause issue was in a nested query
 
-Creating the 98load_all_functions.sql script (which loads everything in order) forced a careful review of all files, which revealed these inconsistencies.
+Creating the 8_1_load_fns_and_triggers.sql script (which loads everything in order) forced a careful review of all files, which revealed these inconsistencies.
 
 ## Related Changes
 
 This fix completes the column renaming initiative:
-- ✅ **3checkAllTopologies.sql** - Already had Slovene names
-- ✅ **5trigger.sql** - NOW fixed with this change
-- ✅ **6validateHierarchy.sql** - Already had correct names
-- ✅ **7triggerHierarchy.sql** - Already had correct names
+- ✅ **2_0_fn_obm_geom_check_all.sql** - Already had Slovene names
+- ✅ **2_1_trg_obm_geom_trigger.sql** - NOW fixed with this change
+- ✅ **3_0_fn_hierarchy_check_all.sql** - Already had correct names
+- ✅ **3_1_trg_hierarchy_triggers.sql** - Already had correct names
 
 All SQL files now use consistent Slovene naming!

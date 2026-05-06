@@ -12,9 +12,9 @@ Delivered:
 - `Makefile` target: `make test-agent`
 
 Discovered and fixed by tests:
-- `Main/3checkAllTopologies.sql`
+- `Main/2_0_fn_obm_geom_check_all.sql`
   - `validate_all(uuid)` empty-version return row was corrected.
-- `Main/7triggerHierarchy.sql`
+- `Main/3_1_trg_hierarchy_triggers.sql`
   - `validate_obmxcona_incremental()` now revalidates both old/new model versions on UPDATE.
 
 Verification:
@@ -34,7 +34,7 @@ Reference:
 
 ### 1. Automatic Rollback in Tests ✅
 
-**File**: `Main/99test_full_system.sql`
+**File**: `Main/8_0_test_full_system.sql`
 
 **Changes**:
 - Added `BEGIN;` transaction at start
@@ -47,20 +47,20 @@ Reference:
 - ✅ Temporary tables
 - ✅ slo_meja modifications
 
-**Usage**: Just run `\i Main/99test_full_system.sql` - rollback is automatic!
+**Usage**: Just run `\i Main/8_0_test_full_system.sql` - rollback is automatic!
 
 ### 2. Function Loader Script ✅
 
-**File**: `Main/98load_all_functions.sql`
+**File**: `Main/8_1_load_fns_and_triggers.sql`
 
 **Purpose**: Load all validation functions and triggers in correct order WITHOUT running setup
 
 **What it loads** (in order):
-1. `1make2decimalPlaces.sql` - Precision functions
-2. `3checkAllTopologies.sql` - OBM validation
-3. `5trigger.sql` - OBM incremental trigger
-4. `6validateHierarchy.sql` - Hierarchy validation
-5. `7triggerHierarchy.sql` - Hierarchy triggers
+1. `1_1_fn_coerce_2_decimal_places.sql` - Precision functions
+2. `2_0_fn_obm_geom_check_all.sql` - OBM validation
+3. `2_1_trg_obm_geom_trigger.sql` - OBM incremental trigger
+4. `3_0_fn_hierarchy_check_all.sql` - Hierarchy validation
+5. `3_1_trg_hierarchy_triggers.sql` - Hierarchy triggers
 
 **What it does NOT load** (deprecated files with `-` prefix):
 - `-0simplify_polygons.sql`
@@ -74,11 +74,11 @@ Reference:
 - ✅ Summary at end with next steps
 - ✅ No data modifications (only function definitions)
 
-**Usage**: `\i Main/98load_all_functions.sql`
+**Usage**: `\i Main/8_1_load_fns_and_triggers.sql`
 
 ### 3. Found and Fixed Critical Bugs! ✅
 
-**File**: `Main/5trigger.sql`
+**File**: `Main/2_1_trg_obm_geom_trigger.sql`
 
 While checking for loose snippets, I discovered **column naming issues** in the trigger file:
 
@@ -118,13 +118,13 @@ While checking for loose snippets, I discovered **column naming issues** in the 
    - Verification examples
 
 3. **98_LOADER_INFO.md**
-   - Complete guide to 98load_all_functions.sql
+   - Complete guide to 8_1_load_fns_and_triggers.sql
    - What it does, when to use it
    - After-running steps
    - Development workflow
 
 4. **FIXES_COLUMN_NAMES.md**
-   - Detailed explanation of bugs found in 5trigger.sql
+   - Detailed explanation of bugs found in 2_1_trg_obm_geom_trigger.sql
    - Before/after examples
    - Why they weren't caught earlier
    - Impact assessment
@@ -138,17 +138,17 @@ While checking for loose snippets, I discovered **column naming issues** in the 
 ### First Time Setup
 ```sql
 -- 1. Create tables, indexes, constraints
-\i Main/00setup.sql
+\i Main/1_0_setup.sql
 
 -- 2. Load all functions and triggers (new!)
-\i Main/98load_all_functions.sql
+\i Main/8_1_load_fns_and_triggers.sql
 
 -- 3. Run initial validation
 SELECT * FROM validate_all_topologies();
 SELECT * FROM validate_all_hierarchies();
 
 -- 4. Test the system (automatic rollback!)
-\i Main/99test_full_system.sql
+\i Main/8_0_test_full_system.sql
 ```
 
 ### Development Workflow
@@ -156,10 +156,10 @@ SELECT * FROM validate_all_hierarchies();
 -- Edit any SQL file (1-7)
 
 -- Reload all functions (quick!)
-\i Main/98load_all_functions.sql
+\i Main/8_1_load_fns_and_triggers.sql
 
 -- Test changes (automatic rollback!)
-\i Main/99test_full_system.sql
+\i Main/8_0_test_full_system.sql
 ```
 
 ## PostgreSQL's Unique Advantage
@@ -179,14 +179,14 @@ Most databases can't roll back DDL or TRUNCATE - PostgreSQL can!
 
 ```
 Main/
-├── 00setup.sql                     - Initial setup (tables, indexes)
-├── 1make2decimalPlaces.sql         - Precision functions
-├── 3checkAllTopologies.sql         - OBM validation functions
-├── 5trigger.sql                    - OBM incremental trigger (FIXED!)
-├── 6validateHierarchy.sql          - Hierarchy validation functions
-├── 7triggerHierarchy.sql           - Hierarchy triggers
-├── 98load_all_functions.sql        - Load all functions (NEW!)
-├── 99test_full_system.sql          - Test suite (UPDATED with auto-rollback!)
+├── 1_0_setup.sql                     - Initial setup (tables, indexes)
+├── 1_1_fn_coerce_2_decimal_places.sql         - Precision functions
+├── 2_0_fn_obm_geom_check_all.sql         - OBM validation functions
+├── 2_1_trg_obm_geom_trigger.sql                    - OBM incremental trigger (FIXED!)
+├── 3_0_fn_hierarchy_check_all.sql          - Hierarchy validation functions
+├── 3_1_trg_hierarchy_triggers.sql           - Hierarchy triggers
+├── 8_1_load_fns_and_triggers.sql        - Load all functions (NEW!)
+├── 8_0_test_full_system.sql          - Test suite (UPDATED with auto-rollback!)
 ├── -0simplify_polygons.sql         - OLD: deprecated
 ├── -2topologyFixer.sql             - OLD: deprecated
 └── -4checkAllTopologiesWithSimplified.sql - OLD: deprecated
@@ -206,7 +206,7 @@ AgentDocs/
 
 ✅ **Rollback integration** - Tests now automatically roll back
 ✅ **Function loader** - 98 script loads all functions in order
-✅ **Bug fixes** - Fixed column name issues in 5trigger.sql
+✅ **Bug fixes** - Fixed column name issues in 2_1_trg_obm_geom_trigger.sql
 ✅ **No loose snippets** - All code is properly organized
 ✅ **Comprehensive docs** - Everything is documented
 
@@ -222,8 +222,8 @@ Your system is now production-ready with:
 ## Next Steps (Optional)
 
 If you want to deploy:
-1. Run `\i Main/00setup.sql` on production
-2. Run `\i Main/98load_all_functions.sql` on production
+1. Run `\i Main/1_0_setup.sql` on production
+2. Run `\i Main/8_1_load_fns_and_triggers.sql` on production
 3. Run `SELECT * FROM validate_all_topologies();` on production
 4. Run `SELECT * FROM validate_all_hierarchies();` on production
 
