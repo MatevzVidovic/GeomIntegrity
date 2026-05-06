@@ -191,6 +191,19 @@ SELECT * FROM validate_all_topologies();
 --     problematicen_id UUID        -- The relevant ID (entity or reference, depending on tip_problema)
 -- );
 
+-- Required column: validation functions and indexes depend on this existing.
+-- This must be created by the application/schema layer, not by this loader.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'md_topoloske_kontrole_hierarhija'
+          AND column_name = 'id_rel_geo_verzija'
+    ) THEN
+        RAISE EXCEPTION 'Missing required column md_topoloske_kontrole_hierarhija.id_rel_geo_verzija';
+    END IF;
+END $$;
+
 -- Query optimization index
 DROP INDEX IF EXISTS idx_topoloske_kontrole_hierarhija_query;
 CREATE INDEX IF NOT EXISTS idx_topoloske_kontrole_hierarhija_query
@@ -216,8 +229,6 @@ BEGIN
 END $$;
 
 -- Constraint: tip_problema must be valid (drop and recreate to allow updates)
--- Note: 97load_fns.sql already handles this migration; this block ensures
--- it is also applied when running 00setup.sql directly.
 DO $$
 BEGIN
     -- Drop first so the UPDATE below is not blocked by any old constraint value
@@ -228,10 +239,12 @@ BEGIN
         ALTER TABLE md_topoloske_kontrole_hierarhija
         DROP CONSTRAINT check_tip_problema_hierarhija;
     END IF;
+
     -- Rename rows from any previous name (idempotent)
     UPDATE md_topoloske_kontrole_hierarhija
     SET tip_problema = 'cona ne obstaja'
     WHERE tip_problema = 'cone ne obstaja';
+
     ALTER TABLE md_topoloske_kontrole_hierarhija
     ADD CONSTRAINT check_tip_problema_hierarhija
     CHECK (tip_problema IN (
@@ -287,4 +300,3 @@ SELECT * FROM validate_all_hierarchies();
 
 -- For all model versions:
 --   SELECT * FROM validate_all_hierarchies();
-
