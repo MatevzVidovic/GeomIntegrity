@@ -9,3 +9,9 @@
 \i /Users/matevzvidovic/GeomIntegrity/Main/00setup.sql
 
 \i /Users/matevzvidovic/GeomIntegrity/Main/99test_full_system.sql
+
+
+
+
+--   psql -h db.lift-t.gurs.sigov.si -p 5432 -U gurs_readwrite -d fmp_data_gurs -W
+--   psql -h db.lift.gurs.sigov.si -p 5432 -U gurs_readwrite -d fmp_data_gurs -W

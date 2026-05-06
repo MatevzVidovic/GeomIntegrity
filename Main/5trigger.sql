@@ -16,6 +16,14 @@ DECLARE
     v_insertion_hole_union_geom geometry;
     v_id_rel_geo_verzija UUID;
 BEGIN
+
+    -- to prevent bogus holes we do this at the start of insert/update part
+    -- v_insertion_geom := st_reduceprecision(NEW.geom, 0.01);
+    -- and at the end of that part we do:
+    -- NEW.geom = v_insertion_geom;
+    -- which we are certain happens correctly, because overflows we try to create actually get cut off
+    
+
     -- Explanation of protocol:
     -- On delete:
     -- OLD.geom is now a potential hole. ST_ReducePrecision.
