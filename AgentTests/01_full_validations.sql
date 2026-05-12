@@ -57,7 +57,16 @@ VALUES
     ('fake_lao', uuid_generate_v4()),
     ('fake_tao', uuid_generate_v4()),
     ('link_orphan_obm', uuid_generate_v4()),
-    ('link_orphan_cona', uuid_generate_v4());
+    ('link_orphan_cona', uuid_generate_v4()),
+    ('full_small_hole_version', uuid_generate_v4()),
+    ('full_small_hole_left', uuid_generate_v4()),
+    ('full_small_hole_right', uuid_generate_v4()),
+    ('full_small_intersection_version', uuid_generate_v4()),
+    ('full_small_intersection_a', uuid_generate_v4()),
+    ('full_small_intersection_b', uuid_generate_v4()),
+    ('full_small_intersection_disabled_version', uuid_generate_v4()),
+    ('full_small_intersection_disabled_a', uuid_generate_v4()),
+    ('full_small_intersection_disabled_b', uuid_generate_v4());
 
 INSERT INTO agent_ids (key, value)
 SELECT 'obm' || gs::text, uuid_generate_v4()
@@ -287,6 +296,96 @@ SELECT pg_temp.assert_true(
 UPDATE md_geo_obm
 SET geom = ST_GeomFromText('POLYGON((1 0, 2 0, 2 1, 1 1, 1 0))', 3794)
 WHERE id = (SELECT value FROM agent_ids WHERE key='obm2');
+
+\echo 'Test group: validate_all small topology autofix'
+
+TRUNCATE TABLE slo_meja;
+INSERT INTO slo_meja (id, created_at, created_by, geom)
+VALUES (
+    uuid_generate_v4(),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))', 3794)
+);
+
+INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
+VALUES
+    ((SELECT value FROM agent_ids WHERE key='full_small_hole_version'), '00000000-0000-0000-0000-000000000000'::uuid, now()::timestamp, 99004, false, 'AGENT_TEST_FULL_SMALL_HOLE', false),
+    ((SELECT value FROM agent_ids WHERE key='full_small_intersection_version'), '00000000-0000-0000-0000-000000000000'::uuid, now()::timestamp, 99005, false, 'AGENT_TEST_FULL_SMALL_INTERSECTION', false),
+    ((SELECT value FROM agent_ids WHERE key='full_small_intersection_disabled_version'), '00000000-0000-0000-0000-000000000000'::uuid, now()::timestamp, 99006, false, 'AGENT_TEST_FULL_SMALL_INTERSECTION_DISABLED', false);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES
+    ((SELECT value FROM agent_ids WHERE key='full_small_hole_left'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='full_small_hole_version'), 'FULL_SMALL_HOLE_LEFT', ST_GeomFromText('POLYGON((0 0, 4.99 0, 4.99 10, 0 10, 0 0))', 3794)),
+    ((SELECT value FROM agent_ids WHERE key='full_small_hole_right'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='full_small_hole_version'), 'FULL_SMALL_HOLE_RIGHT', ST_GeomFromText('POLYGON((5 0, 10 0, 10 10, 5 10, 5 0))', 3794));
+
+SELECT * FROM validate_all((SELECT value FROM agent_ids WHERE key='full_small_hole_version'));
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*)
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='full_small_hole_version')
+          AND tip_topoloskega_problema = 'luknja'
+    ) = 0,
+    'validate_all should autofix small elongated holes before writing luknja controls'
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT abs(SUM(ST_Area(geom)) - 100) < 1e-6
+        FROM md_geo_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='full_small_hole_version')
+    ),
+    'validate_all small hole autofix should preserve full covered area'
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES
+    ((SELECT value FROM agent_ids WHERE key='full_small_intersection_a'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='full_small_intersection_version'), 'FULL_SMALL_INTERSECTION_A', ST_GeomFromText('POLYGON((0 0, 10 0, 10 1, 0 1, 0 0))', 3794)),
+    ((SELECT value FROM agent_ids WHERE key='full_small_intersection_b'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='full_small_intersection_version'), 'FULL_SMALL_INTERSECTION_B', ST_GeomFromText('POLYGON((0 0.99, 10 0.99, 10 2, 0 2, 0 0.99))', 3794));
+
+SELECT * FROM validate_all((SELECT value FROM agent_ids WHERE key='full_small_intersection_version'));
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*)
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='full_small_intersection_version')
+          AND tip_topoloskega_problema = 'prekrivanje'
+    ) = 0,
+    'validate_all should autofix small elongated intersections before writing prekrivanje controls'
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT abs(SUM(ST_Area(geom)) - 20) < 1e-6
+        FROM md_geo_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='full_small_intersection_version')
+    ),
+    'validate_all small intersection autofix should subtract exactly one copy of the small overlap'
+);
+
+SET LOCAL geom_integrity.obm_small_topology_autofix = 'off';
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES
+    ((SELECT value FROM agent_ids WHERE key='full_small_intersection_disabled_a'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='full_small_intersection_disabled_version'), 'FULL_SMALL_INTERSECTION_DISABLED_A', ST_GeomFromText('POLYGON((0 0, 10 0, 10 1, 0 1, 0 0))', 3794)),
+    ((SELECT value FROM agent_ids WHERE key='full_small_intersection_disabled_b'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='full_small_intersection_disabled_version'), 'FULL_SMALL_INTERSECTION_DISABLED_B', ST_GeomFromText('POLYGON((0 0.99, 10 0.99, 10 2, 0 2, 0 0.99))', 3794));
+
+SELECT * FROM validate_all((SELECT value FROM agent_ids WHERE key='full_small_intersection_disabled_version'));
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*)
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='full_small_intersection_disabled_version')
+          AND tip_topoloskega_problema = 'prekrivanje'
+    ) = 1,
+    'Disabled full-validation small autofix should still write small prekrivanje controls'
+);
+
+SET LOCAL geom_integrity.obm_small_topology_autofix = 'on';
 
 \echo 'Test group: validate_cona_hierarchy cases'
 

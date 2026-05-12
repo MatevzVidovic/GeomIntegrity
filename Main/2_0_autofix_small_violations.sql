@@ -13,6 +13,9 @@
 -- ============================================================================
 
 DROP FUNCTION IF EXISTS apply_internal_obm_geom_fix(uuid, geometry);
+DROP FUNCTION IF EXISTS autofix_small_obm_topology_for_version(uuid);
+DROP FUNCTION IF EXISTS autofix_small_intersections_for_version(uuid);
+DROP FUNCTION IF EXISTS autofix_small_holes_for_version(uuid);
 DROP FUNCTION IF EXISTS find_best_obm_neighbor_for_hole(uuid, geometry, uuid);
 DROP FUNCTION IF EXISTS is_small_obm_topology_problem(geometry);
 DROP FUNCTION IF EXISTS obm_topology_compactness(geometry);
@@ -25,49 +28,7 @@ STABLE
 AS $$
 
 
-    -- current_setting('geom_integrity.obm_small_topology_autofix', true)
-
-    -- means: “read setting named geom_integrity.obm_small_topology_autofix; if it does not exist, return NULL instead of
-    -- error.”
-
-    -- Then:
-
-    -- NULLIF(value, '')::boolean
-    
-    -- turns empty string into NULL, otherwise casts values like 'on', 'off', 'true', 'false' to boolean.
-
-    -- Then:
-
-    -- COALESCE(..., true)
-
-    -- means default to true when unset.
-
-    -- So behavior is:
-
-    -- -- default
-    -- SELECT obm_small_topology_autofix_enabled();
-    -- -- true
-
-    -- -- disable for current transaction
-    -- SET LOCAL geom_integrity.obm_small_topology_autofix = 'off';
-
-    -- -- enable for current transaction
-    -- SET LOCAL geom_integrity.obm_small_topology_autofix = 'on';
-
-    -- SET LOCAL lasts only until transaction end. If you want it for the whole DB session:
-
-    -- SET geom_integrity.obm_small_topology_autofix = 'off';
-
-    -- In our trigger, this function decides whether these blocks run:
-
-    -- - small hole merge autofix
-    -- - small intersection subtraction autofix
-    -- - suppressing small control rows when autofix is enabled.
-
-    SELECT COALESCE(
-        NULLIF(current_setting('geom_integrity.obm_small_topology_autofix', true), '')::boolean,
-        true
-    );
+    SELECT false
 $$;
 
 CREATE OR REPLACE FUNCTION obm_topology_compactness(p_geom geometry)
@@ -139,4 +100,149 @@ BEGIN
         COALESCE(NULLIF(v_previous_skip, ''), 'off'),
         true
     );
+END $$;
+
+
+-- ########################################
+-- Autofixing everything at once - for after validate_all_topology:
+-- ########################################
+
+CREATE OR REPLACE FUNCTION autofix_small_holes_for_version(p_id_rel_geo_verzija uuid)
+RETURNS integer
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_slo_meja geometry;
+    v_union_geom geometry;
+    v_holes_geom geometry;
+    v_hole_geom geometry;
+    v_best_neighbor_id uuid;
+    v_fixed_geom geometry;
+    v_fixed_count integer := 0;
+BEGIN
+    SELECT geom INTO v_slo_meja FROM slo_meja LIMIT 1;
+
+    IF v_slo_meja IS NULL THEN
+        RAISE EXCEPTION 'Slovenia boundary (slo_meja) not found';
+    END IF;
+
+    SELECT ST_Union(geom)
+    INTO v_union_geom
+    FROM md_geo_obm
+    WHERE id_rel_geo_verzija = p_id_rel_geo_verzija
+      AND geom IS NOT NULL;
+
+    IF v_union_geom IS NULL OR ST_IsEmpty(v_union_geom) THEN
+        RETURN 0;
+    END IF;
+
+    v_holes_geom := ST_ReducePrecision(ST_Difference(v_slo_meja, v_union_geom), 0.01);
+
+    IF v_holes_geom IS NULL OR ST_IsEmpty(v_holes_geom) THEN
+        RETURN 0;
+    END IF;
+
+    FOR v_hole_geom IN
+        SELECT ST_ReducePrecision((ST_Dump(v_holes_geom)).geom, 0.01)
+    LOOP
+        IF v_hole_geom IS NULL
+           OR ST_IsEmpty(v_hole_geom)
+           OR ST_Area(v_hole_geom) <= 0
+           OR ST_GeometryType(v_hole_geom) NOT IN ('ST_Polygon', 'ST_MultiPolygon')
+           OR NOT is_small_obm_topology_problem(v_hole_geom) THEN
+            CONTINUE;
+        END IF;
+
+        v_best_neighbor_id := find_best_obm_neighbor_for_hole(
+            p_id_rel_geo_verzija,
+            v_hole_geom,
+            NULL
+        );
+
+        IF v_best_neighbor_id IS NULL THEN
+            CONTINUE;
+        END IF;
+
+        SELECT ST_ReducePrecision(ST_Union(obm.geom, v_hole_geom), 0.01)
+        INTO v_fixed_geom
+        FROM md_geo_obm obm
+        WHERE obm.id = v_best_neighbor_id;
+
+        PERFORM apply_internal_obm_geom_fix(v_best_neighbor_id, v_fixed_geom);
+        v_fixed_count := v_fixed_count + 1;
+    END LOOP;
+
+    RETURN v_fixed_count;
+END $$;
+
+CREATE OR REPLACE FUNCTION autofix_small_intersections_for_version(p_id_rel_geo_verzija uuid)
+RETURNS integer
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_target record;
+    v_fixed_geom geometry;
+    v_fixed_count integer := 0;
+BEGIN
+    DROP TABLE IF EXISTS temp_autofix_small_intersections;
+    CREATE TEMP TABLE temp_autofix_small_intersections (
+        id_a uuid,
+        id_b uuid,
+        intersection_geom geometry
+    ) ON COMMIT DROP;
+
+    INSERT INTO temp_autofix_small_intersections (id_a, id_b, intersection_geom)
+    SELECT
+        a.id,
+        b.id,
+        ST_ReducePrecision((ST_Dump(ST_Intersection(a.geom, b.geom))).geom, 0.01)
+    FROM md_geo_obm a
+    JOIN md_geo_obm b ON a.id_rel_geo_verzija = b.id_rel_geo_verzija
+    WHERE a.id_rel_geo_verzija = p_id_rel_geo_verzija
+      AND a.id < b.id
+      AND ST_Intersects(a.geom, b.geom)
+      AND NOT ST_Touches(a.geom, b.geom);
+
+    SELECT COUNT(*)
+    INTO v_fixed_count
+    FROM temp_autofix_small_intersections
+    WHERE ST_GeometryType(intersection_geom) IN ('ST_Polygon', 'ST_MultiPolygon')
+      AND ST_Area(intersection_geom) > 0
+      AND is_small_obm_topology_problem(intersection_geom);
+
+    FOR v_target IN
+        SELECT
+            id_b,
+            ST_ReducePrecision(ST_Union(intersection_geom), 0.01) AS geom_to_remove
+        FROM temp_autofix_small_intersections
+        WHERE ST_GeometryType(intersection_geom) IN ('ST_Polygon', 'ST_MultiPolygon')
+          AND ST_Area(intersection_geom) > 0
+          AND is_small_obm_topology_problem(intersection_geom)
+        GROUP BY id_b
+    LOOP
+        SELECT ST_ReducePrecision(ST_Difference(obm.geom, v_target.geom_to_remove), 0.01)
+        INTO v_fixed_geom
+        FROM md_geo_obm obm
+        WHERE obm.id = v_target.id_b;
+
+        PERFORM apply_internal_obm_geom_fix(v_target.id_b, v_fixed_geom);
+    END LOOP;
+
+    RETURN v_fixed_count;
+END $$;
+
+CREATE OR REPLACE FUNCTION autofix_small_obm_topology_for_version(p_id_rel_geo_verzija uuid)
+RETURNS TABLE(
+    holes_fixed integer,
+    intersections_fixed integer,
+    total_fixed integer
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    holes_fixed := autofix_small_holes_for_version(p_id_rel_geo_verzija);
+    intersections_fixed := autofix_small_intersections_for_version(p_id_rel_geo_verzija);
+    total_fixed := holes_fixed + intersections_fixed;
+
+    RETURN NEXT;
 END $$;

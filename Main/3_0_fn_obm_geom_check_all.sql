@@ -294,6 +294,10 @@ AS $$
 DECLARE
     v_total_count INTEGER := 0;
     v_trigger_existed boolean;
+    v_autofix_pass integer := 0;
+    v_autofix_holes_fixed integer := 0;
+    v_autofix_intersections_fixed integer := 0;
+    v_autofix_total_fixed integer := 0;
 BEGIN
     -- Check whether the topology trigger was active before we drop it.
     -- Only reinstate it at the end if it was already present; this prevents
@@ -329,6 +333,32 @@ BEGIN
 
         RETURN QUERY SELECT p_id_rel_geo_verzija, 0, 0, 0, 0;
         RETURN;
+    END IF;
+
+    IF obm_small_topology_autofix_enabled() THEN
+        LOOP
+            v_autofix_pass := v_autofix_pass + 1;
+
+            SELECT
+                fixes.holes_fixed,
+                fixes.intersections_fixed,
+                fixes.total_fixed
+            INTO
+                v_autofix_holes_fixed,
+                v_autofix_intersections_fixed,
+                v_autofix_total_fixed
+            FROM autofix_small_obm_topology_for_version(p_id_rel_geo_verzija) fixes;
+
+            EXIT WHEN COALESCE(v_autofix_total_fixed, 0) = 0 OR v_autofix_pass >= 5;
+        END LOOP;
+
+        IF COALESCE(v_autofix_total_fixed, 0) > 0 AND v_autofix_pass >= 5 THEN
+            RAISE WARNING
+                'Small OBM topology autofix reached pass limit for version %. Last pass fixed % holes and % intersections.',
+                p_id_rel_geo_verzija,
+                v_autofix_holes_fixed,
+                v_autofix_intersections_fixed;
+        END IF;
     END IF;
 
     holes_found := validate_holes(p_id_rel_geo_verzija);
