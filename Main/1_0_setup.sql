@@ -35,7 +35,7 @@
 
 
 -- ============================================================================
--- STEP 1: Create OBM topology controls table (if not exists)
+-- STEP 0: Create OBM topology controls table (if not exists)
 -- ============================================================================
 -- NOTE: This table should be created in Lift first!
 -- If the table already exists in your database, you can comment out this step.
@@ -60,53 +60,9 @@
 -- Check if your backend (Lift) already creates these indexes automatically.
 
 
--- ============================================================================
--- STEP 2: Disable triggers during setup (prevents conflicts during bulk ops)
--- ============================================================================
--- Disable all triggers to prevent them from firing during initial data setup
-DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm;
-DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona;
-DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona;
-DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao;
-
--- Load function definitions immediately after disabling triggers,
--- so validation functions below can be called without stale DB definitions.
-\i /Users/matevzvidovic/GeomIntegrity/Main/1_2_load_fns.sql
-
 
 -- ============================================================================
--- STEP 3: Ensure geometries have 2 decimal place precision
--- ============================================================================
--- Run these to check and fix precision issues:
--- SELECT * FROM validate_2_decimal_places();
--- SELECT * FROM set_to_2_decimal_places();
--- SELECT * FROM validate_2_decimal_places();
-
-
--- ============================================================================
--- STEP 4: Initialize Slovenia boundary from obmocja union
--- ============================================================================
--- The slo_meja table stores the outer boundary of all obmocja combined.
--- This is used to detect holes (uncovered areas) and overflows.
-
-TRUNCATE TABLE slo_meja;
-
-INSERT INTO slo_meja(id, created_at, created_by, geom)
-SELECT
-    uuid_generate_v4() AS id,
-    now()::timestamp,
-    '00000000-0000-0000-0000-000000000000',
-    ST_MakePolygon(ST_ExteriorRing(
-        ST_ReducePrecision(
-            ST_Union(md_geo_obm.geom),
-            0.01
-        )
-    )) AS geom
-FROM md_geo_obm;
-
-
--- ============================================================================
--- STEP 5: Create indexes on OBM topology controls table
+-- STEP 0.1: Create indexes on OBM topology controls table
 -- ============================================================================
 -- Note: Check if your backend already creates indexes on geometry columns!
 -- PostGIS/Lift often auto-creates spatial indexes (GIST) on geometry columns.
@@ -128,7 +84,7 @@ ON md_topoloske_kontrole_obm (
 
 
 -- ============================================================================
--- STEP 6: Add constraints to OBM topology controls table
+-- STEP 0.2: Add constraints to OBM topology controls table
 -- ============================================================================
 
 -- Constraint: tip_topoloskega_problema must be valid for OBM
@@ -159,21 +115,8 @@ END $$;
 
 
 
-
 -- ============================================================================
--- STEP 7: Run initial topology validation
--- ============================================================================
--- This populates md_topoloske_kontrole_obm with all topology issues.
-
--- For a single model version:
--- SELECT * FROM validate_all('your-uuid-here');
-
--- For all model versions:
-SELECT * FROM validate_all_topologies();
-
-
--- ============================================================================
--- STEP 8: Create hierarchy validation table
+-- STEP 1: Create hierarchy validation table
 -- ============================================================================
 -- This table stores ID-based validation problems for cona/lao/tao hierarchy
 -- NOTE: This table should be created in Lift first!
@@ -253,6 +196,85 @@ BEGIN
         'LAO v nobenem TAO', 'TAO ne obstaja', 'TAO brez LAO'
     ));
 END $$;
+
+
+
+
+
+-- ============================================================================
+-- STEP 2: Disable triggers during setup (prevents conflicts during bulk ops)
+-- ============================================================================
+-- Disable all triggers to prevent them from firing during initial data setup
+DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm;
+DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona;
+DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona;
+DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao;
+
+-- Load function definitions immediately after disabling triggers,
+-- so validation functions below can be called without stale DB definitions.
+\i /Users/matevzvidovic/GeomIntegrity/Main/1_2_load_fns.sql
+
+
+
+
+
+-- ============================================================================
+-- STEP 3: Truncate kontrole tables so we get a truly fresh copy
+-- ============================================================================
+
+TRUNCATE TABLE md_topoloske_kontrole_obm
+TRUNCATE TABLE md_topoloske_kontrole_hierarhija
+
+
+
+-- ============================================================================
+-- STEP 3: Ensure obm geometries have 2 decimal place precision
+-- ============================================================================
+-- Run these to check and fix precision issues:
+SELECT * FROM validate_2_decimal_places();
+SELECT * FROM set_to_2_decimal_places();
+SELECT * FROM validate_2_decimal_places();
+
+
+-- ============================================================================
+-- STEP 4: Initialize Slovenia boundary from obmocja union
+-- ============================================================================
+-- The slo_meja table stores the outer boundary of all obmocja combined.
+-- This is used to detect holes (uncovered areas) and overflows.
+
+TRUNCATE TABLE slo_meja;
+
+INSERT INTO slo_meja(id, created_at, created_by, geom)
+SELECT
+    uuid_generate_v4() AS id,
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000',
+    ST_MakePolygon(ST_ExteriorRing(
+        ST_ReducePrecision(
+            ST_Union(md_geo_obm.geom),
+            0.01
+        )
+    )) AS geom
+FROM md_geo_obm;
+
+
+
+
+
+-- ============================================================================
+-- STEP 7: Run initial topology validation
+-- ============================================================================
+-- This populates md_topoloske_kontrole_obm with all topology issues.
+
+-- For a single model version:
+-- SELECT * FROM validate_all('your-uuid-here');
+
+-- For all model versions:
+SELECT * FROM validate_all_topologies();
+
+
+
+
 
 
 -- ============================================================================
