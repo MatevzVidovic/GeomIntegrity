@@ -33,7 +33,16 @@ INSERT INTO agent_ids (key, value)
 VALUES
     ('version', uuid_generate_v4()),
     ('model', uuid_generate_v4()),
-    ('obm_out', uuid_generate_v4());
+    ('obm_out', uuid_generate_v4()),
+    ('small_version_intersection', uuid_generate_v4()),
+    ('small_model_intersection', uuid_generate_v4()),
+    ('small_intersection_a', uuid_generate_v4()),
+    ('small_intersection_b', uuid_generate_v4()),
+    ('small_version_hole', uuid_generate_v4()),
+    ('small_model_hole', uuid_generate_v4()),
+    ('small_hole_left', uuid_generate_v4()),
+    ('small_hole_strip', uuid_generate_v4()),
+    ('small_hole_right', uuid_generate_v4());
 
 INSERT INTO agent_ids (key, value)
 SELECT 'obm' || gs::text, uuid_generate_v4()
@@ -95,6 +104,20 @@ SELECT pg_temp.assert_true(
 SELECT * FROM validate_all((SELECT value FROM agent_ids WHERE key='version'));
 
 \i /Users/matevzvidovic/GeomIntegrity/Main/2_1_trg_obm_geom_trigger.sql
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT array_agg(tgname::text ORDER BY tgname::text) = ARRAY[
+            'trg_000_coerce_obm_geom_2_decimal_places',
+            'trg_validate_topology_incremental'
+        ]
+        FROM pg_trigger
+        WHERE tgrelid = 'md_geo_obm'::regclass
+          AND NOT tgisinternal
+          AND tgname IN ('trg_000_coerce_obm_geom_2_decimal_places', 'trg_validate_topology_incremental')
+    ),
+    'Precision trigger should sort before topology trigger'
+);
 
 \echo 'Case: DELETE creates one hole'
 DELETE FROM md_geo_obm WHERE id = (SELECT value FROM agent_ids WHERE key='obm5');
@@ -248,6 +271,126 @@ SELECT pg_temp.assert_true(
           AND geom IS NOT NULL
     ), true),
     'Incremental topology trigger should store only 0.01-grid control geometry'
+);
+
+\echo 'Case: small elongated intersection is fixed directly and not written as control'
+TRUNCATE TABLE slo_meja;
+INSERT INTO slo_meja (id, created_at, created_by, geom)
+VALUES (
+    uuid_generate_v4(),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))', 3794)
+);
+
+INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='small_version_intersection'),
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    now()::timestamp,
+    99102,
+    false,
+    'AGENT_TEST_SMALL_INTERSECTION',
+    false
+);
+
+INSERT INTO md_verzije_modeli (id, created_by, created_at, id_rel_geo_verzija, model, verzija)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='small_model_intersection'),
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    now()::timestamp,
+    (SELECT value FROM agent_ids WHERE key='small_version_intersection'),
+    'AGENT_TEST_SMALL_INTERSECTION',
+    202
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='small_intersection_a'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='small_version_intersection'),
+    'T_SMALL_INTERSECTION_A',
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 1, 0 1, 0 0))', 3794)
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='small_intersection_b'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='small_version_intersection'),
+    'T_SMALL_INTERSECTION_B',
+    ST_GeomFromText('POLYGON((0 0.99, 10 0.99, 10 2, 0 2, 0 0.99))', 3794)
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*)
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='small_version_intersection')
+          AND tip_topoloskega_problema = 'prekrivanje'
+    ) = 0,
+    'Small elongated intersection should not be inserted as prekrivanje control'
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT abs(ST_Area(geom) - 10) < 1e-6
+        FROM md_geo_obm
+        WHERE id = (SELECT value FROM agent_ids WHERE key='small_intersection_b')
+    ),
+    'Small intersection should be subtracted from the changed OBM geometry'
+);
+
+\echo 'Case: small elongated delete-created hole is merged into neighbor and not written as control'
+INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='small_version_hole'),
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    now()::timestamp,
+    99103,
+    false,
+    'AGENT_TEST_SMALL_HOLE',
+    false
+);
+
+INSERT INTO md_verzije_modeli (id, created_by, created_at, id_rel_geo_verzija, model, verzija)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='small_model_hole'),
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    now()::timestamp,
+    (SELECT value FROM agent_ids WHERE key='small_version_hole'),
+    'AGENT_TEST_SMALL_HOLE',
+    203
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES
+    ((SELECT value FROM agent_ids WHERE key='small_hole_left'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='small_version_hole'), 'T_SMALL_HOLE_LEFT', ST_GeomFromText('POLYGON((0 0, 4.99 0, 4.99 10, 0 10, 0 0))', 3794)),
+    ((SELECT value FROM agent_ids WHERE key='small_hole_strip'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='small_version_hole'), 'T_SMALL_HOLE_STRIP', ST_GeomFromText('POLYGON((4.99 0, 5 0, 5 10, 4.99 10, 4.99 0))', 3794)),
+    ((SELECT value FROM agent_ids WHERE key='small_hole_right'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='small_version_hole'), 'T_SMALL_HOLE_RIGHT', ST_GeomFromText('POLYGON((5 0, 10 0, 10 10, 5 10, 5 0))', 3794));
+
+DELETE FROM md_geo_obm
+WHERE id = (SELECT value FROM agent_ids WHERE key='small_hole_strip');
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*)
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='small_version_hole')
+          AND tip_topoloskega_problema = 'luknja'
+    ) = 0,
+    'Small elongated hole should be merged into neighbor instead of inserted as luknja control'
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT abs(SUM(ST_Area(geom)) - 100) < 1e-6
+        FROM md_geo_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='small_version_hole')
+    ),
+    'Small hole merge should preserve total covered area for that version'
 );
 
 \echo 'All assertions passed for AgentTests 02'

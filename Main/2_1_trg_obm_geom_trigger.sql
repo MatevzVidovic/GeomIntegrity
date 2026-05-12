@@ -3,6 +3,81 @@
 DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm;
 
 DROP FUNCTION IF EXISTS validate_topology_incremental();
+DROP FUNCTION IF EXISTS apply_internal_obm_geom_fix(uuid, geometry);
+DROP FUNCTION IF EXISTS find_best_obm_neighbor_for_hole(uuid, geometry, uuid);
+DROP FUNCTION IF EXISTS is_small_obm_topology_problem(geometry);
+DROP FUNCTION IF EXISTS obm_topology_compactness(geometry);
+
+CREATE OR REPLACE FUNCTION obm_topology_compactness(p_geom geometry)
+RETURNS double precision
+LANGUAGE sql
+IMMUTABLE
+AS $$
+    SELECT CASE
+        WHEN p_geom IS NULL OR ST_IsEmpty(p_geom) OR ST_Perimeter(p_geom) = 0 THEN NULL
+        ELSE 4 * pi() * ST_Area(p_geom) / (ST_Perimeter(p_geom) * ST_Perimeter(p_geom))
+    END;
+$$;
+
+CREATE OR REPLACE FUNCTION is_small_obm_topology_problem(p_geom geometry)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+AS $$
+    SELECT p_geom IS NOT NULL
+       AND NOT ST_IsEmpty(p_geom)
+       AND ST_Area(p_geom) < 100
+       AND obm_topology_compactness(p_geom) < 0.01;
+$$;
+
+CREATE OR REPLACE FUNCTION find_best_obm_neighbor_for_hole(
+    p_id_rel_geo_verzija uuid,
+    p_hole_geom geometry,
+    p_excluded_obm_id uuid DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT obm.id
+    FROM md_geo_obm obm
+    WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
+      AND obm.geom IS NOT NULL
+      AND (p_excluded_obm_id IS NULL OR obm.id <> p_excluded_obm_id)
+      AND ST_Intersects(ST_Buffer(p_hole_geom, 10), obm.geom)
+    ORDER BY
+      ST_Area(ST_Intersection(ST_Buffer(p_hole_geom, 1), obm.geom)) DESC,
+      obm.id
+    LIMIT 1;
+$$;
+
+CREATE OR REPLACE FUNCTION apply_internal_obm_geom_fix(
+    p_obm_id uuid,
+    p_fixed_geom geometry
+)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_previous_skip text;
+BEGIN
+    IF p_obm_id IS NULL OR p_fixed_geom IS NULL OR ST_IsEmpty(p_fixed_geom) THEN
+        RETURN;
+    END IF;
+
+    v_previous_skip := current_setting('geom_integrity.skip_obm_topology_trigger', true);
+    PERFORM set_config('geom_integrity.skip_obm_topology_trigger', 'on', true);
+
+    UPDATE md_geo_obm
+    SET geom = ST_Multi(ST_ReducePrecision(p_fixed_geom, 0.01))
+    WHERE id = p_obm_id;
+
+    PERFORM set_config(
+        'geom_integrity.skip_obm_topology_trigger',
+        COALESCE(NULLIF(v_previous_skip, ''), 'off'),
+        true
+    );
+END $$;
 
 CREATE OR REPLACE FUNCTION validate_topology_incremental()
 RETURNS TRIGGER
@@ -11,11 +86,21 @@ AS $$
 DECLARE
     v_slo_meja geometry;
     v_hole_geom geometry;
+    v_single_hole_geom geometry;
     v_possible_new_geom geometry;
     v_insertion_geom geometry;
     v_insertion_hole_union_geom geometry;
+    v_small_intersections_geom geometry;
     v_id_rel_geo_verzija UUID;
+    v_best_neighbor_id UUID;
 BEGIN
+    IF current_setting('geom_integrity.skip_obm_topology_trigger', true) = 'on' THEN
+        IF TG_OP = 'DELETE' THEN
+            RETURN OLD;
+        END IF;
+
+        RETURN NEW;
+    END IF;
 
     -- to prevent bogus holes we do this at the start of insert/update part
     -- v_insertion_geom := st_reduceprecision(NEW.geom, 0.01);
@@ -85,6 +170,12 @@ BEGIN
             v_hole_geom := ST_ReducePrecision(ST_Intersection(v_hole_geom, v_slo_meja), 0.01);
         end if;
 
+        IF TG_OP = 'UPDATE' THEN
+            v_insertion_geom := st_reduceprecision(NEW.geom, 0.01);
+            v_insertion_geom := st_reduceprecision(st_intersection(v_insertion_geom, v_slo_meja), 0.01);
+            v_hole_geom := ST_ReducePrecision(ST_Difference(v_hole_geom, v_insertion_geom), 0.01);
+        END IF;
+
         -- Go see if any existing hole intersects it, and join them together if so.
         DROP TABLE IF EXISTS intersecting_holes;
         CREATE TEMP TABLE intersecting_holes ON COMMIT DROP AS (
@@ -110,30 +201,57 @@ BEGIN
 
         -- Insert the merged hole(s)
         IF v_hole_geom IS NOT NULL AND NOT ST_IsEmpty(v_hole_geom) THEN
+            FOR v_single_hole_geom IN
+                SELECT ST_ReducePrecision((ST_Dump(v_hole_geom)).geom, 0.01)
+            LOOP
+                IF v_single_hole_geom IS NULL OR ST_IsEmpty(v_single_hole_geom) OR ST_Area(v_single_hole_geom) <= 0 THEN
+                    CONTINUE;
+                END IF;
 
-            INSERT INTO md_topoloske_kontrole_obm (
-                id,
-                created_at,
-                created_by,
-                geom,
-                id_rel_geo_verzija,
-                povrsina,
-                obseg,
-                kompaktnost,
-                tip_topoloskega_problema
-            )
-            SELECT
-                uuid_generate_v4(),
-                now()::timestamp,
-                '00000000-0000-0000-0000-000000000000'::uuid,
-                hole_geom,
-                v_id_rel_geo_verzija,
-                ST_Area(hole_geom),
-                ST_Perimeter(hole_geom),
-                4*pi()*ST_Area(hole_geom) / NULLIF(ST_Perimeter(hole_geom) * ST_Perimeter(hole_geom), 0),
-                'luknja'
-            FROM (SELECT ST_ReducePrecision((ST_Dump(v_hole_geom)).geom, 0.01) AS hole_geom) AS dump
-            WHERE ST_Area(hole_geom) > 0;
+                IF is_small_obm_topology_problem(v_single_hole_geom) THEN
+                    v_best_neighbor_id := find_best_obm_neighbor_for_hole(
+                        v_id_rel_geo_verzija,
+                        v_single_hole_geom,
+                        OLD.id
+                    );
+
+                    IF v_best_neighbor_id IS NOT NULL THEN
+                        PERFORM apply_internal_obm_geom_fix(
+                            v_best_neighbor_id,
+                            (
+                                SELECT ST_ReducePrecision(ST_Union(obm.geom, v_single_hole_geom), 0.01)
+                                FROM md_geo_obm obm
+                                WHERE obm.id = v_best_neighbor_id
+                            )
+                        );
+
+                        CONTINUE;
+                    END IF;
+                END IF;
+
+                INSERT INTO md_topoloske_kontrole_obm (
+                    id,
+                    created_at,
+                    created_by,
+                    geom,
+                    id_rel_geo_verzija,
+                    povrsina,
+                    obseg,
+                    kompaktnost,
+                    tip_topoloskega_problema
+                )
+                VALUES (
+                    uuid_generate_v4(),
+                    now()::timestamp,
+                    '00000000-0000-0000-0000-000000000000'::uuid,
+                    v_single_hole_geom,
+                    v_id_rel_geo_verzija,
+                    ST_Area(v_single_hole_geom),
+                    ST_Perimeter(v_single_hole_geom),
+                    obm_topology_compactness(v_single_hole_geom),
+                    'luknja'
+                );
+            END LOOP;
 
         END IF;
     END IF;
@@ -165,6 +283,28 @@ BEGIN
               AND NOT ST_Touches(geom, v_insertion_geom)
 
         );
+
+        SELECT ST_ReducePrecision(ST_Union(intersection_geom), 0.01)
+        INTO v_small_intersections_geom
+        FROM new_intersections
+        WHERE ST_GeometryType(intersection_geom) in ('ST_Polygon', 'ST_MultiPolygon')
+          AND is_small_obm_topology_problem(intersection_geom);
+
+        IF v_small_intersections_geom IS NOT NULL AND NOT ST_IsEmpty(v_small_intersections_geom) THEN
+            v_insertion_geom := ST_ReducePrecision(ST_Difference(v_insertion_geom, v_small_intersections_geom), 0.01);
+
+            DROP TABLE IF EXISTS new_intersections;
+            CREATE TEMP TABLE new_intersections ON COMMIT DROP AS (
+                SELECT
+                    id as other_id,
+                    st_reduceprecision((ST_Dump(st_intersection(geom, v_insertion_geom))).geom, 0.01) as intersection_geom
+                FROM md_geo_obm
+                WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
+                  AND id != NEW.id
+                  AND ST_Intersects(geom, v_insertion_geom)
+                  AND NOT ST_Touches(geom, v_insertion_geom)
+            );
+        END IF;
 
         INSERT INTO md_topoloske_kontrole_obm (
             id,
@@ -201,7 +341,8 @@ BEGIN
 --             WHERE  ST_GeometryType(intersection_geom) not in ('ST_LineString')
             WHERE  ST_GeometryType(intersection_geom) in ('ST_Polygon', 'ST_MultiPolygon')
             ) AS calculated
-            WHERE povrsina > 0;
+            WHERE povrsina > 0
+              AND NOT is_small_obm_topology_problem(geom);
 
 
         -- With holes, we take all holes that intersect our insertion geom, we union them into a var,
@@ -226,29 +367,43 @@ BEGIN
         DELETE FROM md_topoloske_kontrole_obm
         WHERE id IN (select id from intersecting_holes);
 
-        INSERT INTO md_topoloske_kontrole_obm (
-            id,
-            created_at,
-            created_by,
-            geom,
-            id_rel_geo_verzija,
-            povrsina,
-            obseg,
-            kompaktnost,
-            tip_topoloskega_problema
-        )
-        SELECT
-            uuid_generate_v4(),
-            now()::timestamp,
-            '00000000-0000-0000-0000-000000000000'::uuid,
-            hole_geom,
-            v_id_rel_geo_verzija,
-            ST_Area(hole_geom),
-            ST_Perimeter(hole_geom),
-            4*pi()*ST_Area(hole_geom) / NULLIF(ST_Perimeter(hole_geom) * ST_Perimeter(hole_geom), 0),
-            'luknja'
-        FROM (SELECT st_reduceprecision((ST_Dump(v_insertion_hole_union_geom)).geom, 0.01) AS hole_geom) AS dump
-        WHERE ST_Area(hole_geom) > 0;
+        IF v_insertion_hole_union_geom IS NOT NULL AND NOT ST_IsEmpty(v_insertion_hole_union_geom) THEN
+            FOR v_single_hole_geom IN
+                SELECT ST_ReducePrecision((ST_Dump(v_insertion_hole_union_geom)).geom, 0.01)
+            LOOP
+                IF v_single_hole_geom IS NULL OR ST_IsEmpty(v_single_hole_geom) OR ST_Area(v_single_hole_geom) <= 0 THEN
+                    CONTINUE;
+                END IF;
+
+                IF is_small_obm_topology_problem(v_single_hole_geom) THEN
+                    v_insertion_geom := ST_ReducePrecision(ST_Union(v_insertion_geom, v_single_hole_geom), 0.01);
+                    CONTINUE;
+                END IF;
+
+                INSERT INTO md_topoloske_kontrole_obm (
+                    id,
+                    created_at,
+                    created_by,
+                    geom,
+                    id_rel_geo_verzija,
+                    povrsina,
+                    obseg,
+                    kompaktnost,
+                    tip_topoloskega_problema
+                )
+                VALUES (
+                    uuid_generate_v4(),
+                    now()::timestamp,
+                    '00000000-0000-0000-0000-000000000000'::uuid,
+                    v_single_hole_geom,
+                    v_id_rel_geo_verzija,
+                    ST_Area(v_single_hole_geom),
+                    ST_Perimeter(v_single_hole_geom),
+                    obm_topology_compactness(v_single_hole_geom),
+                    'luknja'
+                );
+            END LOOP;
+        END IF;
 
         -- make sure the geom we are inserting is what we actually reduced here (important for cutting overflows as we did at the start)
         NEW.geom := v_insertion_geom;
@@ -271,8 +426,6 @@ CREATE TRIGGER trg_validate_topology_incremental
     BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
     FOR EACH ROW
     EXECUTE FUNCTION validate_topology_incremental();
-
-
 
 
 

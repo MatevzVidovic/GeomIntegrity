@@ -36,7 +36,7 @@
 \echo '  • Hierarchy Batch: validate_all_hierarchy, validate_all_hierarchies'
 \echo ''
 \echo 'Active Triggers:'
-\echo '  • md_geo_obm: trg_00_coerce_obm_geom_2_decimal_places'
+\echo '  • md_geo_obm: trg_000_coerce_obm_geom_2_decimal_places'
 \echo '  • md_geo_obm: trg_validate_topology_incremental'
 \echo '  • md_geo_obmxcona: trg_validate_obmxcona_incremental'
 \echo '  • md_geo_cona: trg_validate_cona_lao_incremental'

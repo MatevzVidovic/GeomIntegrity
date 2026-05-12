@@ -1,4 +1,5 @@
 DROP TRIGGER IF EXISTS trg_00_coerce_obm_geom_2_decimal_places ON md_geo_obm;
+DROP TRIGGER IF EXISTS trg_000_coerce_obm_geom_2_decimal_places ON md_geo_obm;
 DROP FUNCTION IF EXISTS coerce_obm_geom_to_2_decimal_places();
 DROP FUNCTION IF EXISTS validate_2_decimal_places();
 DROP FUNCTION IF EXISTS debug_2_decimal_places();
@@ -83,17 +84,17 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     UPDATE md_geo_obm
-    SET geom = ST_ReducePrecision(geom, 0.01)
+    SET geom = ST_ReducePrecision(geom, 0.01);
     -- WHERE geom IS NOT NULL
     --   AND NOT geom_is_on_2_decimal_grid(geom);
 
     UPDATE slo_meja
-    SET geom = ST_ReducePrecision(geom, 0.01)
+    SET geom = ST_ReducePrecision(geom, 0.01);
     -- WHERE geom IS NOT NULL
     --   AND NOT geom_is_on_2_decimal_grid(geom);
 
     UPDATE md_topoloske_kontrole_obm
-    SET geom = ST_ReducePrecision(geom, 0.01)
+    SET geom = ST_ReducePrecision(geom, 0.01);
     -- WHERE geom IS NOT NULL
     --   AND NOT geom_is_on_2_decimal_grid(geom);
 END $$;
@@ -110,7 +111,7 @@ BEGIN
     RETURN NEW;
 END $$;
 
-CREATE TRIGGER trg_00_coerce_obm_geom_2_decimal_places
+CREATE TRIGGER trg_000_coerce_obm_geom_2_decimal_places
     BEFORE INSERT OR UPDATE OF geom ON md_geo_obm
     FOR EACH ROW
     EXECUTE FUNCTION coerce_obm_geom_to_2_decimal_places();

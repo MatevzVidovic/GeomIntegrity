@@ -35,6 +35,7 @@ SELECT
 WITH repo_trigger_names AS (
     SELECT *
     FROM (VALUES
+        ('main/current', 'obm precision',  'trg_000_coerce_obm_geom_2_decimal_places'),
         ('main/current', 'obm topology',   'trg_validate_topology_incremental'),
         ('main/current', 'hierarchy',      'trg_validate_obmxcona_incremental'),
         ('main/current', 'hierarchy',      'trg_validate_cona_lao_incremental'),
@@ -98,6 +99,7 @@ ORDER BY
 WITH repo_trigger_names AS (
     SELECT *
     FROM (VALUES
+        ('main/current', 'obm precision',  'trg_000_coerce_obm_geom_2_decimal_places'),
         ('main/current', 'obm topology',   'trg_validate_topology_incremental'),
         ('main/current', 'hierarchy',      'trg_validate_obmxcona_incremental'),
         ('main/current', 'hierarchy',      'trg_validate_cona_lao_incremental'),
@@ -159,4 +161,3 @@ JOIN pg_proc p
     ON p.oid = t.tgfoid
 WHERE NOT t.tgisinternal
 ORDER BY n.nspname, c.relname, t.tgname;
-

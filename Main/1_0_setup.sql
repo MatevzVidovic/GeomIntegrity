@@ -205,7 +205,7 @@ END $$;
 -- ============================================================================
 -- STEP 2: Disable heavy validation triggers during setup
 -- ============================================================================
--- Keep trg_00_coerce_obm_geom_2_decimal_places active.
+-- Keep trg_000_coerce_obm_geom_2_decimal_places active.
 DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm;
 DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona;
 DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona;
