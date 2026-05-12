@@ -73,7 +73,7 @@ $$;
 
 
 -- ########################################
--- Autofixing everything at once - for after validate_all_topology:
+-- Autofixing everything at once - for after validate_all_topologies:
 -- ########################################
 
 CREATE OR REPLACE FUNCTION autofix_small_holes_for_version(p_id_rel_geo_verzija uuid)

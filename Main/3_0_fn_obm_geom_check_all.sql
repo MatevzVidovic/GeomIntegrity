@@ -279,9 +279,9 @@ $$;
 
 
 
-DROP FUNCTION IF EXISTS validate_all(uuid);
+DROP FUNCTION IF EXISTS validate_all_single_geo_version(uuid);
 
-CREATE OR REPLACE FUNCTION validate_all(p_id_rel_geo_verzija uuid)
+CREATE OR REPLACE FUNCTION validate_all_single_geo_version(p_id_rel_geo_verzija uuid)
 RETURNS TABLE(
     chosen_id_rel_geo_verzija uuid,
     holes_found INTEGER,
@@ -426,7 +426,7 @@ BEGIN
     LOOP
         RETURN QUERY
         SELECT *
-        FROM validate_all(v_version);
+        FROM validate_all_single_geo_version(v_version);
     END LOOP;
 
     -- Reinstate trigger only if it existed before AND its function is defined

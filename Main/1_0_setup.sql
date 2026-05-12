@@ -285,7 +285,7 @@ END $$;
 -- This populates md_topoloske_kontrole_obm with all topology issues.
 
 -- For a single model version:
--- SELECT * FROM validate_all('your-uuid-here');
+-- SELECT * FROM validate_all_single_geo_version('your-uuid-here');
 
 -- For all model versions:
 SELECT * FROM validate_all_topologies();

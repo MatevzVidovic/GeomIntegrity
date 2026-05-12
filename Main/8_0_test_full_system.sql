@@ -273,7 +273,7 @@ DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona;
 DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao;
 
 -- Run full validation
-SELECT * FROM validate_all((SELECT value FROM test_ids WHERE key='version'));
+SELECT * FROM validate_all_single_geo_version((SELECT value FROM test_ids WHERE key='version'));
 SELECT * FROM validate_all_hierarchy((SELECT value FROM test_ids WHERE key='model'));
 
 \echo ''
