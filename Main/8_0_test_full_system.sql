@@ -311,8 +311,8 @@ ORDER BY tip_entitete, tip_problema;
 -- ============================================================================
 \echo ''
 \echo '[7/12] Re-enabling triggers...'
-\i /Users/matevzvidovic/GeomIntegrity/Main/2_1_trg_obm_geom_trigger.sql
-\i /Users/matevzvidovic/GeomIntegrity/Main/3_1_trg_hierarchy_triggers.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/3_1_trg_obm_geom_trigger.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/4_1_trg_hierarchy_triggers.sql
 \echo '   Done: Triggers enabled'
 
 

@@ -94,7 +94,7 @@ VALUES
     (uuid_generate_v4(), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='obm2'), (SELECT value FROM agent_ids WHERE key='cona1')),
     (uuid_generate_v4(), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='obm3'), (SELECT value FROM agent_ids WHERE key='cona2'));
 
-\i /Users/matevzvidovic/GeomIntegrity/Main/3_1_trg_hierarchy_triggers.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/4_1_trg_hierarchy_triggers.sql
 
 SELECT * FROM validate_all_hierarchy((SELECT value FROM agent_ids WHERE key='model1'));
 SELECT * FROM validate_all_hierarchy((SELECT value FROM agent_ids WHERE key='model2'));

@@ -1,4 +1,8 @@
 
+-- ============================================================================
+-- 3_0_fn_obm_geom_check_all.sql - OBM Topology Validation Functions
+-- ============================================================================
+
 DROP FUNCTION IF EXISTS validate_holes(uuid);
 
 CREATE OR REPLACE FUNCTION validate_holes(p_id_rel_geo_verzija uuid)
@@ -406,4 +410,3 @@ BEGIN
     END IF;
 END;
 $$;
-

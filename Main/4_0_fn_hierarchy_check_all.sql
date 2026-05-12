@@ -1,5 +1,5 @@
 -- ============================================================================
--- 3_0_fn_hierarchy_check_all.sql - Cona/Lao/Tao Hierarchy Validation
+-- 4_0_fn_hierarchy_check_all.sql - Cona/Lao/Tao Hierarchy Validation
 -- ============================================================================
 -- This file contains validation functions for the hierarchy above OBM:
 --   - Cona: must contain exactly the OBMs assigned to it via obmxcona
@@ -637,6 +637,5 @@ BEGIN
     -- END IF;
 END;
 $$;
-
 
 

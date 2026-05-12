@@ -103,7 +103,7 @@ SELECT pg_temp.assert_true(
 
 SELECT * FROM validate_all((SELECT value FROM agent_ids WHERE key='version'));
 
-\i /Users/matevzvidovic/GeomIntegrity/Main/2_1_trg_obm_geom_trigger.sql
+\i /Users/matevzvidovic/GeomIntegrity/Main/3_1_trg_obm_geom_trigger.sql
 
 SELECT pg_temp.assert_true(
     (
