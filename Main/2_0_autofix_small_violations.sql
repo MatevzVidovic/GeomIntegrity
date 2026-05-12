@@ -45,10 +45,25 @@ RETURNS boolean
 LANGUAGE sql
 IMMUTABLE
 AS $$
-    SELECT p_geom IS NOT NULL
-       AND NOT ST_IsEmpty(p_geom)
-       AND ST_Area(p_geom) < 100
-       AND obm_topology_compactness(p_geom) < 0.01;
+    WITH metrics AS (
+        SELECT
+            ST_Area(p_geom) AS area,
+            obm_topology_compactness(p_geom) AS compactness
+        WHERE p_geom IS NOT NULL
+        AND NOT ST_IsEmpty(p_geom)
+    )
+    SELECT COALESCE(
+        EXISTS (
+            SELECT 1
+            FROM metrics
+            WHERE area < 10
+                OR (
+                    area < 100
+                    AND compactness < 0.01
+                )
+        ),
+        false
+    );
 $$;
 
 CREATE OR REPLACE FUNCTION find_best_obm_neighbor_for_hole(
