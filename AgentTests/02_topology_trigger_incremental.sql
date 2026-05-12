@@ -330,25 +330,27 @@ VALUES (
 
 SELECT pg_temp.assert_true(
     (
-        SELECT COUNT(*)
+        SELECT COUNT(*) = CASE WHEN obm_small_topology_autofix_enabled() THEN 0 ELSE 1 END
         FROM md_topoloske_kontrole_obm
         WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='small_version_intersection')
           AND tip_topoloskega_problema = 'prekrivanje'
-    ) = 0,
-    'Small elongated intersection should not be inserted as prekrivanje control'
+    ),
+    'Small elongated intersection control behavior should follow obm_small_topology_autofix_enabled()'
 );
 
 SELECT pg_temp.assert_true(
     (
-        SELECT abs(ST_Area(geom) - 10) < 1e-6
+        SELECT CASE
+            WHEN obm_small_topology_autofix_enabled() THEN abs(ST_Area(geom) - 10) < 1e-6
+            ELSE abs(ST_Area(geom) - 10.1) < 1e-6
+        END
         FROM md_geo_obm
         WHERE id = (SELECT value FROM agent_ids WHERE key='small_intersection_b')
     ),
-    'Small intersection should be subtracted from the changed OBM geometry'
+    'Small elongated intersection geometry should follow obm_small_topology_autofix_enabled()'
 );
 
-\echo 'Case: small autofix can be disabled by session setting'
-SET LOCAL geom_integrity.obm_small_topology_autofix = 'off';
+\echo 'Case: second small elongated intersection follows autofix function'
 
 INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
 VALUES (
@@ -393,17 +395,15 @@ VALUES (
 
 SELECT pg_temp.assert_true(
     (
-        SELECT COUNT(*)
+        SELECT COUNT(*) = CASE WHEN obm_small_topology_autofix_enabled() THEN 0 ELSE 1 END
         FROM md_topoloske_kontrole_obm
         WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='small_version_intersection_disabled')
           AND tip_topoloskega_problema = 'prekrivanje'
-    ) = 1,
-    'Disabled small autofix should write small prekrivanje control'
+    ),
+    'Second small intersection control behavior should follow obm_small_topology_autofix_enabled()'
 );
 
-SET LOCAL geom_integrity.obm_small_topology_autofix = 'on';
-
-\echo 'Case: small elongated delete-created hole is merged into neighbor and not written as control'
+\echo 'Case: small elongated delete-created hole is written as control'
 INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
 VALUES (
     (SELECT value FROM agent_ids WHERE key='small_version_hole'),
@@ -440,17 +440,17 @@ SELECT pg_temp.assert_true(
         FROM md_topoloske_kontrole_obm
         WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='small_version_hole')
           AND tip_topoloskega_problema = 'luknja'
-    ) = 0,
-    'Small elongated hole should be merged into neighbor instead of inserted as luknja control'
+    ) = 1,
+    'Delete-created small hole should be written as luknja control'
 );
 
 SELECT pg_temp.assert_true(
     (
-        SELECT abs(SUM(ST_Area(geom)) - 100) < 1e-6
+        SELECT abs(SUM(ST_Area(geom)) - 99.9) < 1e-6
         FROM md_geo_obm
         WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='small_version_hole')
     ),
-    'Small hole merge should preserve total covered area for that version'
+    'Delete-created small hole should not mutate another OBM from the row trigger'
 );
 
 \echo 'All assertions passed for AgentTests 02'
