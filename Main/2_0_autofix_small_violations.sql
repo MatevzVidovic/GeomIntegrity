@@ -16,6 +16,59 @@ DROP FUNCTION IF EXISTS apply_internal_obm_geom_fix(uuid, geometry);
 DROP FUNCTION IF EXISTS find_best_obm_neighbor_for_hole(uuid, geometry, uuid);
 DROP FUNCTION IF EXISTS is_small_obm_topology_problem(geometry);
 DROP FUNCTION IF EXISTS obm_topology_compactness(geometry);
+DROP FUNCTION IF EXISTS obm_small_topology_autofix_enabled();
+
+CREATE OR REPLACE FUNCTION obm_small_topology_autofix_enabled()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+AS $$
+
+
+    -- current_setting('geom_integrity.obm_small_topology_autofix', true)
+
+    -- means: “read setting named geom_integrity.obm_small_topology_autofix; if it does not exist, return NULL instead of
+    -- error.”
+
+    -- Then:
+
+    -- NULLIF(value, '')::boolean
+    
+    -- turns empty string into NULL, otherwise casts values like 'on', 'off', 'true', 'false' to boolean.
+
+    -- Then:
+
+    -- COALESCE(..., true)
+
+    -- means default to true when unset.
+
+    -- So behavior is:
+
+    -- -- default
+    -- SELECT obm_small_topology_autofix_enabled();
+    -- -- true
+
+    -- -- disable for current transaction
+    -- SET LOCAL geom_integrity.obm_small_topology_autofix = 'off';
+
+    -- -- enable for current transaction
+    -- SET LOCAL geom_integrity.obm_small_topology_autofix = 'on';
+
+    -- SET LOCAL lasts only until transaction end. If you want it for the whole DB session:
+
+    -- SET geom_integrity.obm_small_topology_autofix = 'off';
+
+    -- In our trigger, this function decides whether these blocks run:
+
+    -- - small hole merge autofix
+    -- - small intersection subtraction autofix
+    -- - suppressing small control rows when autofix is enabled.
+
+    SELECT COALESCE(
+        NULLIF(current_setting('geom_integrity.obm_small_topology_autofix', true), '')::boolean,
+        true
+    );
+$$;
 
 CREATE OR REPLACE FUNCTION obm_topology_compactness(p_geom geometry)
 RETURNS double precision

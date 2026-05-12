@@ -142,7 +142,8 @@ BEGIN
                 END IF;
 
                 -- autofix small - holes
-                IF is_small_obm_topology_problem(v_single_hole_geom) THEN
+                IF obm_small_topology_autofix_enabled()
+                   AND is_small_obm_topology_problem(v_single_hole_geom) THEN
                     v_best_neighbor_id := find_best_obm_neighbor_for_hole(
                         v_id_rel_geo_verzija,
                         v_single_hole_geom,
@@ -219,13 +220,17 @@ BEGIN
         );
 
         -- autofix small - intersections
-        SELECT ST_ReducePrecision(ST_Union(intersection_geom), 0.01)
-        INTO v_small_intersections_geom
-        FROM new_intersections
-        WHERE ST_GeometryType(intersection_geom) in ('ST_Polygon', 'ST_MultiPolygon')
-          AND is_small_obm_topology_problem(intersection_geom);
+        IF obm_small_topology_autofix_enabled() THEN
+            SELECT ST_ReducePrecision(ST_Union(intersection_geom), 0.01)
+            INTO v_small_intersections_geom
+            FROM new_intersections
+            WHERE ST_GeometryType(intersection_geom) in ('ST_Polygon', 'ST_MultiPolygon')
+              AND is_small_obm_topology_problem(intersection_geom);
+        END IF;
 
-        IF v_small_intersections_geom IS NOT NULL AND NOT ST_IsEmpty(v_small_intersections_geom) THEN
+        IF obm_small_topology_autofix_enabled()
+           AND v_small_intersections_geom IS NOT NULL
+           AND NOT ST_IsEmpty(v_small_intersections_geom) THEN
             v_insertion_geom := ST_ReducePrecision(ST_Difference(v_insertion_geom, v_small_intersections_geom), 0.01);
 
             DROP TABLE IF EXISTS new_intersections;
@@ -277,7 +282,10 @@ BEGIN
             WHERE  ST_GeometryType(intersection_geom) in ('ST_Polygon', 'ST_MultiPolygon')
             ) AS calculated
             WHERE povrsina > 0
-              AND NOT is_small_obm_topology_problem(geom);
+              AND (
+                  NOT obm_small_topology_autofix_enabled()
+                  OR NOT is_small_obm_topology_problem(geom)
+              );
 
 
         -- With holes, we take all holes that intersect our insertion geom, we union them into a var,
@@ -311,7 +319,8 @@ BEGIN
                 END IF;
 
                 -- autofix small - holes
-                IF is_small_obm_topology_problem(v_single_hole_geom) THEN
+                IF obm_small_topology_autofix_enabled()
+                   AND is_small_obm_topology_problem(v_single_hole_geom) THEN
                     v_insertion_geom := ST_ReducePrecision(ST_Union(v_insertion_geom, v_single_hole_geom), 0.01);
                     CONTINUE;
                 END IF;
@@ -362,8 +371,6 @@ CREATE TRIGGER trg_validate_topology_incremental
     BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
     FOR EACH ROW
     EXECUTE FUNCTION validate_topology_incremental();
-
-
 
 
 

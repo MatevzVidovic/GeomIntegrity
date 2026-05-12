@@ -38,6 +38,10 @@ VALUES
     ('small_model_intersection', uuid_generate_v4()),
     ('small_intersection_a', uuid_generate_v4()),
     ('small_intersection_b', uuid_generate_v4()),
+    ('small_version_intersection_disabled', uuid_generate_v4()),
+    ('small_model_intersection_disabled', uuid_generate_v4()),
+    ('small_intersection_disabled_a', uuid_generate_v4()),
+    ('small_intersection_disabled_b', uuid_generate_v4()),
     ('small_version_hole', uuid_generate_v4()),
     ('small_model_hole', uuid_generate_v4()),
     ('small_hole_left', uuid_generate_v4()),
@@ -342,6 +346,62 @@ SELECT pg_temp.assert_true(
     ),
     'Small intersection should be subtracted from the changed OBM geometry'
 );
+
+\echo 'Case: small autofix can be disabled by session setting'
+SET LOCAL geom_integrity.obm_small_topology_autofix = 'off';
+
+INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='small_version_intersection_disabled'),
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    now()::timestamp,
+    99104,
+    false,
+    'AGENT_TEST_SMALL_INTERSECTION_DISABLED',
+    false
+);
+
+INSERT INTO md_verzije_modeli (id, created_by, created_at, id_rel_geo_verzija, model, verzija)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='small_model_intersection_disabled'),
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    now()::timestamp,
+    (SELECT value FROM agent_ids WHERE key='small_version_intersection_disabled'),
+    'AGENT_TEST_SMALL_INTERSECTION_DISABLED',
+    204
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='small_intersection_disabled_a'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='small_version_intersection_disabled'),
+    'T_SMALL_INTERSECTION_DISABLED_A',
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 1, 0 1, 0 0))', 3794)
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='small_intersection_disabled_b'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='small_version_intersection_disabled'),
+    'T_SMALL_INTERSECTION_DISABLED_B',
+    ST_GeomFromText('POLYGON((0 0.99, 10 0.99, 10 2, 0 2, 0 0.99))', 3794)
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*)
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='small_version_intersection_disabled')
+          AND tip_topoloskega_problema = 'prekrivanje'
+    ) = 1,
+    'Disabled small autofix should write small prekrivanje control'
+);
+
+SET LOCAL geom_integrity.obm_small_topology_autofix = 'on';
 
 \echo 'Case: small elongated delete-created hole is merged into neighbor and not written as control'
 INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
