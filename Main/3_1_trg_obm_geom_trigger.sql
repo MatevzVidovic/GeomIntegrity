@@ -141,28 +141,11 @@ BEGIN
                     CONTINUE;
                 END IF;
 
-                -- autofix small - holes
-                IF obm_small_topology_autofix_enabled()
-                   AND is_small_obm_topology_problem(v_single_hole_geom) THEN
-                    v_best_neighbor_id := find_best_obm_neighbor_for_hole(
-                        v_id_rel_geo_verzija,
-                        v_single_hole_geom,
-                        OLD.id
-                    );
-
-                    IF v_best_neighbor_id IS NOT NULL THEN
-                        PERFORM apply_internal_obm_geom_fix(
-                            v_best_neighbor_id,
-                            (
-                                SELECT ST_ReducePrecision(ST_Union(obm.geom, v_single_hole_geom), 0.01)
-                                FROM md_geo_obm obm
-                                WHERE obm.id = v_best_neighbor_id
-                            )
-                        );
-
-                        CONTINUE;
-                    END IF;
-                END IF;
+                -- here we do not do: autofix small - holes
+                -- because we are deleting a geom and would therefore need to append the geom to some other obm
+                -- which could potentially trigger an infinite sequence of calls.
+                -- It is also not necessary, because if this is a DELETE, it will all be one big hole anyways,
+                -- and if this is an update, the small holes will get joined later anyways. 
 
                 INSERT INTO md_topoloske_kontrole_obm (
                     id,

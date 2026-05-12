@@ -12,7 +12,6 @@
 -- update md_geo_obm while the md_geo_obm trigger is already running.
 -- ============================================================================
 
-DROP FUNCTION IF EXISTS apply_internal_obm_geom_fix(uuid, geometry);
 DROP FUNCTION IF EXISTS autofix_small_obm_topology_for_version(uuid);
 DROP FUNCTION IF EXISTS autofix_small_intersections_for_version(uuid);
 DROP FUNCTION IF EXISTS autofix_small_holes_for_version(uuid);
@@ -26,8 +25,6 @@ RETURNS boolean
 LANGUAGE sql
 STABLE
 AS $$
-
-
     SELECT false
 $$;
 
@@ -73,34 +70,6 @@ AS $$
       obm.id
     LIMIT 1;
 $$;
-
-CREATE OR REPLACE FUNCTION apply_internal_obm_geom_fix(
-    p_obm_id uuid,
-    p_fixed_geom geometry
-)
-RETURNS void
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    v_previous_skip text;
-BEGIN
-    IF p_obm_id IS NULL OR p_fixed_geom IS NULL OR ST_IsEmpty(p_fixed_geom) THEN
-        RETURN;
-    END IF;
-
-    v_previous_skip := current_setting('geom_integrity.skip_obm_topology_trigger', true);
-    PERFORM set_config('geom_integrity.skip_obm_topology_trigger', 'on', true);
-
-    UPDATE md_geo_obm
-    SET geom = ST_Multi(ST_ReducePrecision(p_fixed_geom, 0.01))
-    WHERE id = p_obm_id;
-
-    PERFORM set_config(
-        'geom_integrity.skip_obm_topology_trigger',
-        COALESCE(NULLIF(v_previous_skip, ''), 'off'),
-        true
-    );
-END $$;
 
 
 -- ########################################
@@ -168,7 +137,10 @@ BEGIN
         FROM md_geo_obm obm
         WHERE obm.id = v_best_neighbor_id;
 
-        PERFORM apply_internal_obm_geom_fix(v_best_neighbor_id, v_fixed_geom);
+        UPDATE md_geo_obm
+        SET geom = ST_Multi(ST_ReducePrecision(v_fixed_geom, 0.01))
+        WHERE id = v_best_neighbor_id;
+
         v_fixed_count := v_fixed_count + 1;
     END LOOP;
 
@@ -225,7 +197,10 @@ BEGIN
         FROM md_geo_obm obm
         WHERE obm.id = v_target.id_b;
 
-        PERFORM apply_internal_obm_geom_fix(v_target.id_b, v_fixed_geom);
+        UPDATE md_geo_obm
+        SET geom = ST_Multi(ST_ReducePrecision(v_fixed_geom, 0.01))
+        WHERE id = v_target.id_b;
+
     END LOOP;
 
     RETURN v_fixed_count;
