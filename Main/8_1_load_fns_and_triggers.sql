@@ -31,7 +31,7 @@
 \echo 'Loaded Functions:'
 \echo '  • Precision: validate_2_decimal_places, set_to_2_decimal_places'
 \echo '  • OBM Validation: validate_holes, validate_overflows, validate_intersections'
-\echo '  • OBM Batch: validate_all, validate_all_topologies'
+\echo '  • OBM Batch: validate_all, validate_all_topologies, autofix_small_obm_topology_all_versions'
 \echo '  • Hierarchy Validation: validate_cona_hierarchy, validate_lao_hierarchy, validate_tao_hierarchy'
 \echo '  • Hierarchy Batch: validate_all_hierarchy, validate_all_hierarchies'
 \echo ''

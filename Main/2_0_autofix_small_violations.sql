@@ -12,6 +12,7 @@
 -- update md_geo_obm while the md_geo_obm trigger is already running.
 -- ============================================================================
 
+DROP FUNCTION IF EXISTS autofix_small_obm_topology_all_versions();
 DROP FUNCTION IF EXISTS autofix_small_obm_topology_for_version(uuid);
 DROP FUNCTION IF EXISTS autofix_small_intersections_for_version(uuid);
 DROP FUNCTION IF EXISTS autofix_small_holes_for_version(uuid);
@@ -25,7 +26,7 @@ RETURNS boolean
 LANGUAGE sql
 STABLE
 AS $$
-    SELECT false
+    SELECT true
 $$;
 
 CREATE OR REPLACE FUNCTION obm_topology_compactness(p_geom geometry)
@@ -220,4 +221,53 @@ BEGIN
     total_fixed := holes_fixed + intersections_fixed;
 
     RETURN NEXT;
+END $$;
+
+-- only meant for manual running .The validate_all_topologies fn does what this fn does by itself already
+CREATE OR REPLACE FUNCTION autofix_small_obm_topology_all_versions()
+RETURNS TABLE(
+    chosen_id_rel_geo_verzija uuid,
+    holes_fixed integer,
+    intersections_fixed integer,
+    total_fixed integer
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_version uuid;
+    v_trigger_existed boolean;
+BEGIN
+    SELECT EXISTS (
+        SELECT 1 FROM pg_trigger t
+        JOIN pg_class c ON t.tgrelid = c.oid
+        WHERE t.tgname = 'trg_validate_topology_incremental'
+          AND c.relname = 'md_geo_obm'
+    ) INTO v_trigger_existed;
+
+    IF v_trigger_existed THEN
+        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm';
+    END IF;
+
+    FOR v_version IN
+        SELECT DISTINCT obm.id_rel_geo_verzija
+        FROM md_geo_obm obm
+        WHERE obm.id_rel_geo_verzija IS NOT NULL
+        ORDER BY obm.id_rel_geo_verzija
+    LOOP
+        RETURN QUERY
+        SELECT
+            v_version,
+            fixes.holes_fixed,
+            fixes.intersections_fixed,
+            fixes.total_fixed
+        FROM autofix_small_obm_topology_for_version(v_version) fixes;
+    END LOOP;
+
+    IF v_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_topology_incremental') THEN
+        EXECUTE '
+            CREATE TRIGGER trg_validate_topology_incremental
+            BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
+            FOR EACH ROW
+            EXECUTE FUNCTION validate_topology_incremental()';
+    END IF;
 END $$;
