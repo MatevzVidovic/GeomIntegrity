@@ -83,6 +83,15 @@ VALUES
     ((SELECT value FROM agent_ids WHERE key='obm8'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='version'), 'T_OBM_8', ST_GeomFromText('POLYGON((1 2, 2 2, 2 3, 1 3, 1 2))', 3794)),
     ((SELECT value FROM agent_ids WHERE key='obm9'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='version'), 'T_OBM_9', ST_GeomFromText('POLYGON((2 2, 3 2, 3 3, 2 3, 2 2))', 3794));
 
+SELECT pg_temp.assert_true(
+    (
+        SELECT bool_and(geom_is_on_2_decimal_grid(geom))
+        FROM md_geo_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='version')
+    ),
+    'Precision trigger should keep fixture OBM geometry on 0.01 grid'
+);
+
 SELECT * FROM validate_all((SELECT value FROM agent_ids WHERE key='version'));
 
 \i /Users/matevzvidovic/GeomIntegrity/Main/2_1_trg_obm_geom_trigger.sql
@@ -215,6 +224,30 @@ SELECT pg_temp.assert_true(
         WHERE id = (SELECT value FROM agent_ids WHERE key='obm_out')
     ),
     'Clipped geometry area should be 0.25 square units'
+);
+
+\echo 'Case: UPDATE coerces NEW.geom to 2 decimals'
+UPDATE md_geo_obm
+SET geom = ST_GeomFromText('POLYGON((2.11111 2.11111, 2.44444 2.11111, 2.44444 2.44444, 2.11111 2.44444, 2.11111 2.11111))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='obm_out');
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT geom_is_on_2_decimal_grid(geom)
+        FROM md_geo_obm
+        WHERE id = (SELECT value FROM agent_ids WHERE key='obm_out')
+    ),
+    'Precision trigger should coerce updated OBM geometry to 0.01 grid'
+);
+
+SELECT pg_temp.assert_true(
+    COALESCE((
+        SELECT bool_and(geom_is_on_2_decimal_grid(geom))
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='version')
+          AND geom IS NOT NULL
+    ), true),
+    'Incremental topology trigger should store only 0.01-grid control geometry'
 );
 
 \echo 'All assertions passed for AgentTests 02'

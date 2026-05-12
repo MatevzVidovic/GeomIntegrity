@@ -1,12 +1,12 @@
 -- ============================================================================
 -- 1_2_load_fns.sql - Load Function Definitions Only (no triggers)
 -- ============================================================================
--- Loads all validation function definitions WITHOUT creating any triggers.
+-- Loads function definitions and installs only the lightweight OBM precision trigger.
 -- Run:
 --   \i /Users/matevzvidovic/GeomIntegrity/Main/
 --
--- Use this when you need functions available but want to control trigger
--- activation separately (e.g. during bulk data setup).
+-- Use this when you need functions available but want to control heavy validation
+-- trigger activation separately (e.g. during bulk data setup).
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -20,4 +20,4 @@
 \echo '[3/3] Loading hierarchy validation functions...'
 \i /Users/matevzvidovic/GeomIntegrity/Main/3_0_fn_hierarchy_check_all.sql
 
-\echo '✅ Function definitions loaded (no triggers active).'
+\echo '✅ Function definitions loaded (only OBM precision trigger is active).'

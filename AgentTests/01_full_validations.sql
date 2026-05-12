@@ -159,6 +159,18 @@ SELECT pg_temp.assert_true(
 );
 
 SELECT pg_temp.assert_true(
+    (
+        SELECT bool_and(geom_is_on_2_decimal_grid(geom))
+        FROM md_geo_obm
+        WHERE id_rel_geo_verzija IN (
+            (SELECT value FROM agent_ids WHERE key = 'version1'),
+            (SELECT value FROM agent_ids WHERE key = 'version2')
+        )
+    ),
+    'Loaded OBM geometry should be on 0.01 grid'
+);
+
+SELECT pg_temp.assert_true(
     EXISTS (
         SELECT 1
         FROM validate_all((SELECT value FROM agent_ids WHERE key = 'version2')) v
@@ -260,6 +272,16 @@ SELECT pg_temp.assert_true(
           AND id2 = GREATEST((SELECT value FROM agent_ids WHERE key='obm2'), (SELECT value FROM agent_ids WHERE key='obm5'))
     ),
     'intersection entry should be created with ordered id1/id2 pair'
+);
+
+SELECT pg_temp.assert_true(
+    COALESCE((
+        SELECT bool_and(geom_is_on_2_decimal_grid(geom))
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='version1')
+          AND geom IS NOT NULL
+    ), true),
+    'Batch topology validators should store only 0.01-grid control geometry'
 );
 
 UPDATE md_geo_obm

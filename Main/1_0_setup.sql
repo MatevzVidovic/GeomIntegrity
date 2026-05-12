@@ -31,6 +31,7 @@
 -- \i /Users/matevzvidovic/GeomIntegrity/Main/8_0_test_full_system.sql
 --
 
+\set ON_ERROR_STOP on
 \pset pager off
 
 
@@ -202,9 +203,9 @@ END $$;
 
 
 -- ============================================================================
--- STEP 2: Disable triggers during setup (prevents conflicts during bulk ops)
+-- STEP 2: Disable heavy validation triggers during setup
 -- ============================================================================
--- Disable all triggers to prevent them from firing during initial data setup
+-- Keep trg_00_coerce_obm_geom_2_decimal_places active.
 DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm;
 DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona;
 DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona;
@@ -222,22 +223,28 @@ DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao;
 -- STEP 3: Truncate kontrole tables so we get a truly fresh copy
 -- ============================================================================
 
-TRUNCATE TABLE md_topoloske_kontrole_obm
-TRUNCATE TABLE md_topoloske_kontrole_hierarhija
+TRUNCATE TABLE md_topoloske_kontrole_obm;
+TRUNCATE TABLE md_topoloske_kontrole_hierarhija;
 
 
 
 -- ============================================================================
--- STEP 3: Ensure obm geometries have 2 decimal place precision
+-- STEP 4: Ensure existing geometry data has 2 decimal place precision
 -- ============================================================================
--- Run these to check and fix precision issues:
 SELECT * FROM validate_2_decimal_places();
 SELECT * FROM set_to_2_decimal_places();
 SELECT * FROM validate_2_decimal_places();
 
+DO $$
+BEGIN
+    IF NOT validate_2_decimal_places() THEN
+        RAISE EXCEPTION 'Geometry precision validation failed after set_to_2_decimal_places()';
+    END IF;
+END $$;
+
 
 -- ============================================================================
--- STEP 4: Initialize Slovenia boundary from obmocja union
+-- STEP 5: Initialize Slovenia boundary from obmocja union
 -- ============================================================================
 -- The slo_meja table stores the outer boundary of all obmocja combined.
 -- This is used to detect holes (uncovered areas) and overflows.
@@ -249,20 +256,31 @@ SELECT
     uuid_generate_v4() AS id,
     now()::timestamp,
     '00000000-0000-0000-0000-000000000000',
-    ST_MakePolygon(ST_ExteriorRing(
-        ST_ReducePrecision(
-            ST_Union(md_geo_obm.geom),
-            0.01
-        )
-    )) AS geom
+    ST_ReducePrecision(
+        ST_MakePolygon(ST_ExteriorRing(
+            ST_ReducePrecision(
+                ST_Union(md_geo_obm.geom),
+                0.01
+            )
+        )),
+        0.01
+    ) AS geom
 FROM md_geo_obm;
+
+SELECT * FROM validate_2_decimal_places();
+DO $$
+BEGIN
+    IF NOT validate_2_decimal_places() THEN
+        RAISE EXCEPTION 'Geometry precision validation failed after slo_meja rebuild';
+    END IF;
+END $$;
 
 
 
 
 
 -- ============================================================================
--- STEP 7: Run initial topology validation
+-- STEP 6: Run initial topology validation
 -- ============================================================================
 -- This populates md_topoloske_kontrole_obm with all topology issues.
 
@@ -278,7 +296,7 @@ SELECT * FROM validate_all_topologies();
 
 
 -- ============================================================================
--- STEP 9: Run initial hierarchy validation
+-- STEP 7: Run initial hierarchy validation
 -- ============================================================================
 -- This populates md_topoloske_kontrole_hierarhija with all hierarchy issues.
 
@@ -290,7 +308,7 @@ SELECT * FROM validate_all_hierarchies();
 
 
 -- ============================================================================
--- STEP 10: Activate triggers
+-- STEP 8: Activate heavy validation triggers
 -- ============================================================================
 -- Trigger functions and triggers are created here, after all validation has run,
 -- so the initial bulk validation above is not slowed down by per-row trigger calls.

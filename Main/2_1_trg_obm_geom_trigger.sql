@@ -20,7 +20,7 @@ BEGIN
     -- to prevent bogus holes we do this at the start of insert/update part
     -- v_insertion_geom := st_reduceprecision(NEW.geom, 0.01);
     -- and at the end of that part we do:
-    -- NEW.geom = v_insertion_geom;
+    -- NEW.geom := v_insertion_geom;
     -- which we are certain happens correctly, because overflows we try to create actually get cut off
     
 
@@ -65,7 +65,7 @@ BEGIN
         v_hole_geom := st_reduceprecision(OLD.geom, 0.01);
 
         -- Remove from it the union of all obm that intersect it.
-        SELECT ST_Difference(
+        SELECT ST_ReducePrecision(ST_Difference(
             v_hole_geom, (
                 SELECT ST_Union(geom)
                 FROM md_geo_obm
@@ -73,7 +73,7 @@ BEGIN
                     AND ST_Intersects(geom, v_hole_geom) AND NOT ST_Touches(geom, v_hole_geom)
                     AND id != OLD.id
             )
-        ) INTO v_possible_new_geom;
+        ), 0.01) INTO v_possible_new_geom;
 
         -- is null when no intersections
         if v_possible_new_geom is not null then
@@ -82,7 +82,7 @@ BEGIN
 
         -- If it isn't ST_Covers(v_slo_meja, v_hole_geom), then remove the overflow from the hole.
         if not ST_Covers(v_slo_meja, v_hole_geom) then
-            v_hole_geom := ST_Intersection(v_hole_geom, v_slo_meja);
+            v_hole_geom := ST_ReducePrecision(ST_Intersection(v_hole_geom, v_slo_meja), 0.01);
         end if;
 
         -- Go see if any existing hole intersects it, and join them together if so.
@@ -95,7 +95,7 @@ BEGIN
               AND ST_Intersects(geom, v_hole_geom)
         );
 
-        SELECT ST_Union(ST_Union(geom), v_hole_geom)
+        SELECT ST_ReducePrecision(ST_Union(ST_Union(geom), v_hole_geom), 0.01)
         INTO v_possible_new_geom
         FROM intersecting_holes;
 
@@ -132,7 +132,7 @@ BEGIN
                 ST_Perimeter(hole_geom),
                 4*pi()*ST_Area(hole_geom) / NULLIF(ST_Perimeter(hole_geom) * ST_Perimeter(hole_geom), 0),
                 'luknja'
-            FROM (SELECT (ST_Dump(v_hole_geom)).geom AS hole_geom) AS dump
+            FROM (SELECT ST_ReducePrecision((ST_Dump(v_hole_geom)).geom, 0.01) AS hole_geom) AS dump
             WHERE ST_Area(hole_geom) > 0;
 
         END IF;
@@ -149,13 +149,15 @@ BEGIN
         v_insertion_geom := st_reduceprecision(NEW.geom, 0.01);
 
         -- if not covered by border, remove the overflow.
-        v_insertion_geom := st_intersection(v_insertion_geom, v_slo_meja);
+        v_insertion_geom := st_reduceprecision(st_intersection(v_insertion_geom, v_slo_meja), 0.01);
 
 
         -- if intersects with anyone, create a new intersection
         DROP TABLE IF EXISTS new_intersections;
         CREATE TEMP TABLE new_intersections ON COMMIT DROP AS (
-            SELECT id as other_id, st_reduceprecision((ST_Dump(st_intersection(geom, v_insertion_geom))).geom, 0.01) as intersection_geom
+            SELECT 
+                id as other_id, 
+                st_reduceprecision((ST_Dump(st_intersection(geom, v_insertion_geom))).geom, 0.01) as intersection_geom
             FROM md_geo_obm
             WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
               AND id != NEW.id
@@ -216,10 +218,10 @@ BEGIN
             AND ST_Intersects(v_insertion_geom, geom)
         );
 
-        v_insertion_hole_union_geom := (SELECT st_union(geom)
+        v_insertion_hole_union_geom := (SELECT st_reduceprecision(st_union(geom), 0.01)
                                         from md_topoloske_kontrole_obm
                                         where id in (select id from intersecting_holes));
-        v_insertion_hole_union_geom := st_difference(v_insertion_hole_union_geom, v_insertion_geom);
+        v_insertion_hole_union_geom := st_reduceprecision(st_difference(v_insertion_hole_union_geom, v_insertion_geom), 0.01);
 
         DELETE FROM md_topoloske_kontrole_obm
         WHERE id IN (select id from intersecting_holes);
@@ -249,7 +251,7 @@ BEGIN
         WHERE ST_Area(hole_geom) > 0;
 
         -- make sure the geom we are inserting is what we actually reduced here (important for cutting overflows as we did at the start)
-        NEW.geom = v_insertion_geom;
+        NEW.geom := v_insertion_geom;
 
     END IF;
 
@@ -269,8 +271,6 @@ CREATE TRIGGER trg_validate_topology_incremental
     BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
     FOR EACH ROW
     EXECUTE FUNCTION validate_topology_incremental();
-
-
 
 
 
