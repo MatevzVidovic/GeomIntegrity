@@ -4,15 +4,8 @@
     <file url="file://$PROJECT_DIR$/Main/-0simplify_polygons.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/Main/-2topologyFixer.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/Main/-4checkAllTopologiesWithSimplified.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/Main/00setup.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/Main/1make2decimalPlaces.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/Main/3checkAllTopologies.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/Main/5trigger.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/Main/6validateHierarchy.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/Main/7triggerHierarchy.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/Main/99test_full_system.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/Main/1_0_setup.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/playground.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/repo_trigger_status.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/trigger_status.sql" dialect="PostgreSQL" />
   </component>
 </project>
