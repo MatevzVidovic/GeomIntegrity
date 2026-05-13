@@ -49,68 +49,10 @@ RETURNS TABLE(
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_slo_meja geometry;
-    v_union_geom geometry;
-    v_overflow_geom geometry;
-    v_intermediate_ids uuid[];
     v_overflows_count INTEGER := 0;
-    v_step_time timestamp;
 BEGIN
-
-    v_step_time := clock_timestamp();
-
-
-    -- Get Slovenia boundary
-    SELECT geom INTO v_slo_meja FROM slo_meja LIMIT 1;
-
-    IF v_slo_meja IS NULL THEN
-        RAISE EXCEPTION 'Slovenia boundary (slo_meja) not found';
-    END IF;
-
     DELETE FROM md_topoloske_kontrole_obm
     WHERE id_rel_geo_verzija = p_id_rel_geo_verzija AND tip_topoloskega_problema = 'preliv';    -- Mark entries that overflow Slovenia boundary
-
-
-
-
-    -- ========================================================================
-    -- STEP 3: Find and mark OVERFLOWS
-    -- ========================================================================
-    -- Overflow = areas that extend beyond Slovenia boundary
-
-        -- Create temporary table
-    DROP TABLE IF EXISTS temp_overflows;
-    CREATE TEMP TABLE IF NOT EXISTS temp_overflows (
-        id uuid,
-        overflow_geom geometry
-    ) ON COMMIT DROP;
-
-    INSERT INTO temp_overflows
---     SELECT id, (ST_Dump(st_difference(geom, v_slo_meja))).geom
-    SELECT id, st_reduceprecision((ST_Dump(st_difference(geom, v_slo_meja))).geom, 0.01)
-
---     SELECT id, st_difference(geom, v_slo_meja)
-    FROM md_geo_obm
-    WHERE id_rel_geo_verzija = p_id_rel_geo_verzija
-        AND geom IS NOT NULL
-        AND NOT st_covers(v_slo_meja, geom);
-
-
-
-    -- RAISE NOTICE 'step 111 % ms', EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_step_time));
-    -- v_step_time := clock_timestamp();
-
-
---     RAISE NOTICE 'Overflows: %', (SELECT COUNT(*) FROM temp_overflows);
---
---     RAISE NOTICE 'Overflows: %', (
---         SELECT jsonb_pretty(jsonb_agg(row_to_json(t)))
--- --         FROM temp_overflows t
---         FROM (
---             SELECT id, ST_Area(overflow_geom) as area, ST_GeometryType(overflow_geom) as geom_type
---             FROM temp_overflows
---         ) t
---     );
 
     INSERT INTO md_topoloske_kontrole_obm ( id, created_at, created_by, id_rel_geo_verzija, tip_topoloskega_problema, id1, geom, obseg, povrsina, kompaktnost)
     SELECT
@@ -119,23 +61,13 @@ BEGIN
         '00000000-0000-0000-0000-000000000000'::uuid,
         p_id_rel_geo_verzija,
         'preliv',
-        id,
-        geom,
-        obseg,
-        povrsina,
-        4*pi()*povrsina / NULLIF(obseg * obseg, 0)   -- (circle has it 0.08 (1/4*pi) and is most compact. Everything else is less compact.)
-    FROM (
-        SELECT
-            id,
-            overflow_geom as geom,
-            ST_Perimeter(overflow_geom) as obseg,
---                 -1 AS obseg,
-            ST_Area(overflow_geom) as povrsina
-        FROM temp_overflows
-        WHERE -- NOT ST_Contains(v_slo_meja, overflow_geom) AND
-         ST_GeometryType(overflow_geom) in ('ST_Polygon', 'ST_MultiPolygon')
-        ) AS calculated
-    WHERE povrsina > 0;
+        candidates.obm_id,
+        candidates.overflow_geom,
+        candidates.obseg,
+        candidates.povrsina,
+        candidates.kompaktnost
+    FROM get_obm_overflow_candidates(p_id_rel_geo_verzija) candidates
+    WHERE NOT preprocessing_is_small_obm_topology_problem(candidates.overflow_geom);
 
     GET DIAGNOSTICS v_overflows_count = ROW_COUNT;
 
@@ -312,8 +244,7 @@ BEGIN
                 v_autofix_total_fixed
             FROM autofix_small_obm_topology_for_version(p_id_rel_geo_verzija) fixes;
 
-            v_autofix_overflows_fixed := v_autofix_overflows_fixed
-                + autofix_overflows_for_version(p_id_rel_geo_verzija);
+            v_autofix_overflows_fixed := autofix_overflows_for_version(p_id_rel_geo_verzija);
 
             v_autofix_total_fixed := COALESCE(v_autofix_total_fixed, 0)
                 + COALESCE(v_autofix_overflows_fixed, 0);
@@ -323,7 +254,7 @@ BEGIN
 
         IF COALESCE(v_autofix_total_fixed, 0) > 0 AND v_autofix_pass >= 5 THEN
             RAISE WARNING
-                'OBM topology autofix reached pass limit for version %. Last pass fixed % overflows, % holes and % intersections.',
+                'OBM topology autofix reached pass limit for version %. Last pass left % reportable overflows and fixed % holes and % intersections.',
                 p_id_rel_geo_verzija,
                 v_autofix_overflows_fixed,
                 v_autofix_holes_fixed,
@@ -334,7 +265,7 @@ BEGIN
         v_autofix_overflows_fixed := autofix_overflows_for_version(p_id_rel_geo_verzija);
         IF v_autofix_overflows_fixed > 0 THEN
             RAISE NOTICE
-                'OBM overflow autofix clipped % geometries for version %.',
+                'OBM overflow autofix left % reportable overflows for version %.',
                 v_autofix_overflows_fixed,
                 p_id_rel_geo_verzija;
         END IF;

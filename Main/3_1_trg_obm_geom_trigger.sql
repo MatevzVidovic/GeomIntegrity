@@ -4,7 +4,8 @@
 -- 3_1_trg_obm_geom_trigger.sql - Incremental OBM Topology Trigger
 -- ============================================================================
 -- Requires:
---   2_0_autofix_small_violations.sql
+--   2_0_fn_obm_topology_shared.sql
+--   2_1_autofix_small_violations.sql
 --   3_0_fn_obm_geom_check_all.sql
 -- ============================================================================
 
@@ -354,7 +355,6 @@ CREATE TRIGGER trg_validate_topology_incremental
     BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
     FOR EACH ROW
     EXECUTE FUNCTION validate_topology_incremental();
-
 
 
 
