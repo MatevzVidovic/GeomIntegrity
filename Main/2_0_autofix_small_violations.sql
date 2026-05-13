@@ -120,6 +120,59 @@ AS $$
     LIMIT 1;
 $$;
 
+CREATE OR REPLACE FUNCTION get_obm_hole_candidates(p_id_rel_geo_verzija uuid)
+RETURNS TABLE(
+    hole_geom geometry,
+    obseg double precision,
+    povrsina double precision,
+    kompaktnost double precision
+)
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+    v_slo_meja geometry;
+    v_union_geom geometry;
+    v_holes_geom geometry;
+BEGIN
+    SELECT geom INTO v_slo_meja FROM slo_meja LIMIT 1;
+
+    IF v_slo_meja IS NULL THEN
+        RAISE EXCEPTION 'Slovenia boundary (slo_meja) not found';
+    END IF;
+
+    SELECT ST_Union(obm.geom)
+    INTO v_union_geom
+    FROM md_geo_obm obm
+    WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
+      AND obm.geom IS NOT NULL;
+
+    IF v_union_geom IS NULL OR ST_IsEmpty(v_union_geom) THEN
+        RETURN;
+    END IF;
+
+    v_holes_geom := ST_Difference(v_slo_meja, v_union_geom);
+
+    IF v_holes_geom IS NULL OR ST_IsEmpty(v_holes_geom) THEN
+        RETURN;
+    END IF;
+
+    RETURN QUERY
+    SELECT
+        hole.geom,
+        ST_Perimeter(hole.geom) AS obseg,
+        ST_Area(hole.geom) AS povrsina,
+        obm_topology_compactness(hole.geom) AS kompaktnost
+    FROM (
+        SELECT ST_ReducePrecision((dump_result).geom, 0.01) AS geom
+        FROM (
+            SELECT ST_Dump(v_holes_geom) AS dump_result
+        ) dumps
+    ) hole
+    WHERE ST_GeometryType(hole.geom) IN ('ST_Polygon', 'ST_MultiPolygon')
+      AND ST_Area(hole.geom) > 0;
+END $$;
+
 
 -- ########################################
 -- Autofixing everything at once - for after validate_all_topologies:
@@ -164,7 +217,8 @@ BEGIN
     FROM clipped
     WHERE obm.id = clipped.id
       AND clipped.geom IS NOT NULL
-      AND NOT ST_IsEmpty(clipped.geom);
+      AND NOT ST_IsEmpty(clipped.geom)
+      AND NOT ST_Equals(obm.geom, clipped.geom);
 
     GET DIAGNOSTICS v_fixed_count = ROW_COUNT;
 
@@ -218,47 +272,16 @@ RETURNS integer
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_slo_meja geometry;
-    v_union_geom geometry;
-    v_holes_geom geometry;
     v_hole_geom geometry;
     v_best_neighbor_id uuid;
     v_fixed_geom geometry;
     v_fixed_count integer := 0;
 BEGIN
-    SELECT geom INTO v_slo_meja FROM slo_meja LIMIT 1;
-
-    IF v_slo_meja IS NULL THEN
-        RAISE EXCEPTION 'Slovenia boundary (slo_meja) not found';
-    END IF;
-
-    SELECT ST_Union(geom)
-    INTO v_union_geom
-    FROM md_geo_obm
-    WHERE id_rel_geo_verzija = p_id_rel_geo_verzija
-      AND geom IS NOT NULL;
-
-    IF v_union_geom IS NULL OR ST_IsEmpty(v_union_geom) THEN
-        RETURN 0;
-    END IF;
-
-    v_holes_geom := ST_ReducePrecision(ST_Difference(v_slo_meja, v_union_geom), 0.01);
-
-    IF v_holes_geom IS NULL OR ST_IsEmpty(v_holes_geom) THEN
-        RETURN 0;
-    END IF;
-
     FOR v_hole_geom IN
-        SELECT ST_ReducePrecision((ST_Dump(v_holes_geom)).geom, 0.01)
+        SELECT candidates.hole_geom
+        FROM get_obm_hole_candidates(p_id_rel_geo_verzija) candidates
+        WHERE preprocessing_is_small_obm_topology_problem(candidates.hole_geom)
     LOOP
-        IF v_hole_geom IS NULL
-           OR ST_IsEmpty(v_hole_geom)
-           OR ST_Area(v_hole_geom) <= 0
-           OR ST_GeometryType(v_hole_geom) NOT IN ('ST_Polygon', 'ST_MultiPolygon')
-           OR NOT preprocessing_is_small_obm_topology_problem(v_hole_geom) THEN
-            CONTINUE;
-        END IF;
-
         v_best_neighbor_id := find_best_obm_neighbor_for_hole(
             p_id_rel_geo_verzija,
             v_hole_geom,

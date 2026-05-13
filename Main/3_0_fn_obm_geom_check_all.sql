@@ -12,67 +12,25 @@ RETURNS TABLE(
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_slo_meja geometry;
-    v_union_geom geometry;
-    v_holes_geom geometry;
     v_holes_count INTEGER := 0;
 BEGIN
-    -- Get Slovenia boundary
-    SELECT geom INTO v_slo_meja FROM slo_meja LIMIT 1;
-
-    IF v_slo_meja IS NULL THEN
-        RAISE EXCEPTION 'Slovenia boundary (slo_meja) not found';
-    END IF;
-
-
-    -- ========================================================================
-    -- STEP 1: Calculate union of all geometries for this version
-    -- ========================================================================
-    SELECT ST_Union(geom) INTO v_union_geom
-    FROM md_geo_obm
-    WHERE id_rel_geo_verzija = p_id_rel_geo_verzija
-      AND geom IS NOT NULL;
-
-    -- ========================================================================
-    -- STEP 2: Find and record HOLES
-    -- ========================================================================
-    -- Holes = areas within Slovenia that are not covered by any geometry
-    v_holes_geom := ST_Difference(v_slo_meja, v_union_geom);
-
     -- Clear existing holes for this version
     DELETE FROM md_topoloske_kontrole_obm
     WHERE id_rel_geo_verzija = p_id_rel_geo_verzija AND tip_topoloskega_problema = 'luknja';
 
-    -- Insert new holes if they exist
-    IF v_holes_geom IS NOT NULL AND NOT ST_IsEmpty(v_holes_geom) THEN
-        -- Handle multipolygon case - insert each polygon separately
-       INSERT INTO md_topoloske_kontrole_obm (created_at, id, created_by, id_rel_geo_verzija, tip_topoloskega_problema, geom, obseg, povrsina, kompaktnost)
-        SELECT
-            now()::timestamp,
-            uuid_generate_v4(),
-            '00000000-0000-0000-0000-000000000000'::uuid,
-            p_id_rel_geo_verzija,
-            'luknja',
-            geom,
-            obseg,
-            povrsina,
-            4*pi()*povrsina / NULLIF(obseg * obseg, 0)   -- (circle has it 0.08 (1/4*pi) and is most compact. Everything else is less compact.)
-        FROM (
-            SELECT
-                geom,
-                ST_Perimeter(geom) as obseg,
-                ST_Area(geom) as povrsina
-            FROM (
-                SELECT st_reduceprecision((dump_result).geom, 0.01) as geom
-                FROM (
-                    SELECT ST_Dump(v_holes_geom) AS dump_result
-                ) AS dumps
-            ) as dumped_geoms
-            WHERE ST_GeometryType(geom) in ('ST_Polygon', 'ST_MultiPolygon')
-        ) AS calculated
-        WHERE povrsina > 0;
+    INSERT INTO md_topoloske_kontrole_obm (created_at, id, created_by, id_rel_geo_verzija, tip_topoloskega_problema, geom, obseg, povrsina, kompaktnost)
+    SELECT
+        now()::timestamp,
+        uuid_generate_v4(),
+        '00000000-0000-0000-0000-000000000000'::uuid,
+        p_id_rel_geo_verzija,
+        'luknja',
+        candidates.hole_geom,
+        candidates.obseg,
+        candidates.povrsina,
+        candidates.kompaktnost
+    FROM get_obm_hole_candidates(p_id_rel_geo_verzija) candidates;
 
-    END IF;
     GET DIAGNOSTICS v_holes_count = ROW_COUNT;
 
     RETURN QUERY SELECT v_holes_count;
@@ -338,14 +296,6 @@ BEGIN
         RETURN;
     END IF;
 
-    v_autofix_overflows_fixed := autofix_overflows_for_version(p_id_rel_geo_verzija);
-        IF v_autofix_overflows_fixed > 0 THEN
-            RAISE NOTICE
-                'OBM overflow autofix clipped % geometries for version %.',
-                v_autofix_overflows_fixed,
-                p_id_rel_geo_verzija;
-        END IF;
-
     IF obm_small_topology_autofix_enabled() THEN
 
         LOOP
@@ -364,6 +314,7 @@ BEGIN
 
             v_autofix_overflows_fixed := v_autofix_overflows_fixed
                 + autofix_overflows_for_version(p_id_rel_geo_verzija);
+
             v_autofix_total_fixed := COALESCE(v_autofix_total_fixed, 0)
                 + COALESCE(v_autofix_overflows_fixed, 0);
 
@@ -379,6 +330,14 @@ BEGIN
                 v_autofix_intersections_fixed;
         END IF;
 
+    ELSE
+        v_autofix_overflows_fixed := autofix_overflows_for_version(p_id_rel_geo_verzija);
+        IF v_autofix_overflows_fixed > 0 THEN
+            RAISE NOTICE
+                'OBM overflow autofix clipped % geometries for version %.',
+                v_autofix_overflows_fixed,
+                p_id_rel_geo_verzija;
+        END IF;
     END IF;
 
 
