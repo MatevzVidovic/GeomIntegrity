@@ -67,6 +67,8 @@ VALUES
     ('full_small_intersection_disabled_version', uuid_generate_v4()),
     ('full_small_intersection_disabled_a', uuid_generate_v4()),
     ('full_small_intersection_disabled_b', uuid_generate_v4()),
+    ('full_overflow_version', uuid_generate_v4()),
+    ('full_overflow_obm', uuid_generate_v4()),
     ('all_versions_small_hole_version', uuid_generate_v4()),
     ('all_versions_small_hole_left', uuid_generate_v4()),
     ('all_versions_small_hole_right', uuid_generate_v4()),
@@ -163,7 +165,7 @@ VALUES (
 SELECT pg_temp.assert_true(
     EXISTS (
         SELECT 1
-        FROM validate_all((SELECT value FROM agent_ids WHERE key = 'version1')) v
+        FROM validate_all_topologies_single_geo_version((SELECT value FROM agent_ids WHERE key = 'version1')) v
         WHERE v.chosen_id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key = 'version1')
           AND v.holes_found = 0
           AND v.overflows_found = 0
@@ -188,20 +190,25 @@ SELECT pg_temp.assert_true(
 SELECT pg_temp.assert_true(
     EXISTS (
         SELECT 1
-        FROM validate_all((SELECT value FROM agent_ids WHERE key = 'version2')) v
+        FROM validate_all_topologies_single_geo_version((SELECT value FROM agent_ids WHERE key = 'version2')) v
         WHERE v.chosen_id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key = 'version2')
-          AND v.holes_found > 0
+          AND (
+              CASE
+                  WHEN obm_small_topology_autofix_enabled() THEN v.holes_found = 0
+                  ELSE v.holes_found > 0
+              END
+          )
           AND v.overflows_found = 0
           AND v.intersections_found = 0
           AND v.total_entries = 1
     ),
-    'validate_all for sparse version2 should report holes, no overflows/intersections, total 1'
+    'validate_all for sparse version2 hole behavior should follow obm_small_topology_autofix_enabled()'
 );
 
 SELECT pg_temp.assert_true(
     EXISTS (
         SELECT 1
-        FROM validate_all((SELECT value FROM agent_ids WHERE key = 'version_empty')) v
+        FROM validate_all_topologies_single_geo_version((SELECT value FROM agent_ids WHERE key = 'version_empty')) v
         WHERE v.chosen_id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key = 'version_empty')
           AND v.holes_found = 0
           AND v.overflows_found = 0
@@ -318,14 +325,48 @@ INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zak
 VALUES
     ((SELECT value FROM agent_ids WHERE key='full_small_hole_version'), '00000000-0000-0000-0000-000000000000'::uuid, now()::timestamp, 99004, false, 'AGENT_TEST_FULL_SMALL_HOLE', false),
     ((SELECT value FROM agent_ids WHERE key='full_small_intersection_version'), '00000000-0000-0000-0000-000000000000'::uuid, now()::timestamp, 99005, false, 'AGENT_TEST_FULL_SMALL_INTERSECTION', false),
-    ((SELECT value FROM agent_ids WHERE key='full_small_intersection_disabled_version'), '00000000-0000-0000-0000-000000000000'::uuid, now()::timestamp, 99006, false, 'AGENT_TEST_FULL_SMALL_INTERSECTION_DISABLED', false);
+    ((SELECT value FROM agent_ids WHERE key='full_small_intersection_disabled_version'), '00000000-0000-0000-0000-000000000000'::uuid, now()::timestamp, 99006, false, 'AGENT_TEST_FULL_SMALL_INTERSECTION_DISABLED', false),
+    ((SELECT value FROM agent_ids WHERE key='full_overflow_version'), '00000000-0000-0000-0000-000000000000'::uuid, now()::timestamp, 99009, false, 'AGENT_TEST_FULL_OVERFLOW', false);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='full_overflow_obm'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='full_overflow_version'),
+    'FULL_OVERFLOW_OBM',
+    ST_GeomFromText('POLYGON((-1 0, 5 0, 5 5, -1 5, -1 0))', 3794)
+);
+
+SELECT * FROM validate_all_topologies_single_geo_version((SELECT value FROM agent_ids WHERE key='full_overflow_version'));
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT ST_Covers(s.geom, obm.geom)
+        FROM md_geo_obm obm
+        CROSS JOIN slo_meja s
+        WHERE obm.id = (SELECT value FROM agent_ids WHERE key='full_overflow_obm')
+        LIMIT 1
+    ),
+    'validate_all_topologies_single_geo_version should always clip overflow geometry'
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*) = 0
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='full_overflow_version')
+          AND tip_topoloskega_problema = 'preliv'
+    ),
+    'validate_all_topologies_single_geo_version should not write preliv after overflow clipping'
+);
 
 INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
 VALUES
     ((SELECT value FROM agent_ids WHERE key='full_small_hole_left'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='full_small_hole_version'), 'FULL_SMALL_HOLE_LEFT', ST_GeomFromText('POLYGON((0 0, 4.99 0, 4.99 10, 0 10, 0 0))', 3794)),
     ((SELECT value FROM agent_ids WHERE key='full_small_hole_right'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='full_small_hole_version'), 'FULL_SMALL_HOLE_RIGHT', ST_GeomFromText('POLYGON((5 0, 10 0, 10 10, 5 10, 5 0))', 3794));
 
-SELECT * FROM validate_all((SELECT value FROM agent_ids WHERE key='full_small_hole_version'));
+SELECT * FROM validate_all_topologies_single_geo_version((SELECT value FROM agent_ids WHERE key='full_small_hole_version'));
 
 SELECT pg_temp.assert_true(
     (
@@ -354,7 +395,7 @@ VALUES
     ((SELECT value FROM agent_ids WHERE key='full_small_intersection_a'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='full_small_intersection_version'), 'FULL_SMALL_INTERSECTION_A', ST_GeomFromText('POLYGON((0 0, 10 0, 10 1, 0 1, 0 0))', 3794)),
     ((SELECT value FROM agent_ids WHERE key='full_small_intersection_b'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='full_small_intersection_version'), 'FULL_SMALL_INTERSECTION_B', ST_GeomFromText('POLYGON((0 0.99, 10 0.99, 10 2, 0 2, 0 0.99))', 3794));
 
-SELECT * FROM validate_all((SELECT value FROM agent_ids WHERE key='full_small_intersection_version'));
+SELECT * FROM validate_all_topologies_single_geo_version((SELECT value FROM agent_ids WHERE key='full_small_intersection_version'));
 
 SELECT pg_temp.assert_true(
     (
@@ -383,7 +424,7 @@ VALUES
     ((SELECT value FROM agent_ids WHERE key='full_small_intersection_disabled_a'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='full_small_intersection_disabled_version'), 'FULL_SMALL_INTERSECTION_DISABLED_A', ST_GeomFromText('POLYGON((0 0, 10 0, 10 1, 0 1, 0 0))', 3794)),
     ((SELECT value FROM agent_ids WHERE key='full_small_intersection_disabled_b'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='full_small_intersection_disabled_version'), 'FULL_SMALL_INTERSECTION_DISABLED_B', ST_GeomFromText('POLYGON((0 0.99, 10 0.99, 10 2, 0 2, 0 0.99))', 3794));
 
-SELECT * FROM validate_all((SELECT value FROM agent_ids WHERE key='full_small_intersection_disabled_version'));
+SELECT * FROM validate_all_topologies_single_geo_version((SELECT value FROM agent_ids WHERE key='full_small_intersection_disabled_version'));
 
 SELECT pg_temp.assert_true(
     (

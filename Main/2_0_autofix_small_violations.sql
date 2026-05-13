@@ -1,11 +1,12 @@
 -- ============================================================================
--- 2_0_autofix_small_violations.sql - Small OBM Topology Autofix Helpers
+-- 2_0_autofix_small_violations.sql - OBM Topology Autofix Helpers
 -- ============================================================================
+-- Overflow preprocessing clips OBM geometry to slo_meja before batch validation.
 -- Small violations are geometry slivers we fix immediately instead of writing
--- into md_topoloske_kontrole_obm.
+-- them into md_topoloske_kontrole_obm.
 --
 -- Rule:
---   ST_Area(geom) < 100 AND compactness < 0.01
+--   ST_Area(geom) < 10 OR (ST_Area(geom) < 100 AND compactness < 0.01)
 --
 -- These helpers are used by the OBM incremental trigger. They are intentionally
 -- not implemented as triggers on md_topoloske_kontrole_obm, because that would
@@ -16,6 +17,8 @@ DROP FUNCTION IF EXISTS autofix_small_obm_topology_all_versions();
 DROP FUNCTION IF EXISTS autofix_small_obm_topology_for_version(uuid);
 DROP FUNCTION IF EXISTS autofix_small_intersections_for_version(uuid);
 DROP FUNCTION IF EXISTS autofix_small_holes_for_version(uuid);
+DROP FUNCTION IF EXISTS autofix_overflows_all_versions();
+DROP FUNCTION IF EXISTS autofix_overflows_for_version(uuid);
 DROP FUNCTION IF EXISTS find_best_obm_neighbor_for_hole(uuid, geometry, uuid);
 DROP FUNCTION IF EXISTS is_small_obm_topology_problem(geometry);
 DROP FUNCTION IF EXISTS obm_topology_compactness(geometry);
@@ -91,6 +94,90 @@ $$;
 -- ########################################
 -- Autofixing everything at once - for after validate_all_topologies:
 -- ########################################
+
+CREATE OR REPLACE FUNCTION autofix_overflows_for_version(p_id_rel_geo_verzija uuid)
+RETURNS integer
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_slo_meja geometry;
+    v_fixed_count integer := 0;
+BEGIN
+    SELECT geom INTO v_slo_meja FROM slo_meja LIMIT 1;
+
+    IF v_slo_meja IS NULL THEN
+        RAISE EXCEPTION 'Slovenia boundary (slo_meja) not found';
+    END IF;
+
+    WITH clipped AS (
+        SELECT
+            obm.id,
+            ST_Multi(
+                ST_CollectionExtract(
+                    ST_MakeValid(
+                        ST_ReducePrecision(ST_Intersection(obm.geom, v_slo_meja), 0.01)
+                    ),
+                    3
+                )
+            )::geometry(MultiPolygon, 3794) AS geom
+        FROM md_geo_obm obm
+        WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
+          AND obm.geom IS NOT NULL
+          AND NOT ST_Covers(v_slo_meja, obm.geom)
+    )
+    UPDATE md_geo_obm obm
+    SET geom = clipped.geom
+    FROM clipped
+    WHERE obm.id = clipped.id
+      AND clipped.geom IS NOT NULL
+      AND NOT ST_IsEmpty(clipped.geom);
+
+    GET DIAGNOSTICS v_fixed_count = ROW_COUNT;
+
+    RETURN v_fixed_count;
+END $$;
+
+CREATE OR REPLACE FUNCTION autofix_overflows_all_versions()
+RETURNS TABLE(
+    chosen_id_rel_geo_verzija uuid,
+    overflows_fixed integer
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_version uuid;
+    v_trigger_existed boolean;
+BEGIN
+    SELECT EXISTS (
+        SELECT 1 FROM pg_trigger t
+        JOIN pg_class c ON t.tgrelid = c.oid
+        WHERE t.tgname = 'trg_validate_topology_incremental'
+          AND c.relname = 'md_geo_obm'
+    ) INTO v_trigger_existed;
+
+    IF v_trigger_existed THEN
+        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm';
+    END IF;
+
+    FOR v_version IN
+        SELECT DISTINCT obm.id_rel_geo_verzija
+        FROM md_geo_obm obm
+        WHERE obm.id_rel_geo_verzija IS NOT NULL
+        ORDER BY obm.id_rel_geo_verzija
+    LOOP
+        chosen_id_rel_geo_verzija := v_version;
+        overflows_fixed := autofix_overflows_for_version(v_version);
+        RETURN NEXT;
+    END LOOP;
+
+    IF v_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_topology_incremental') THEN
+        EXECUTE '
+            CREATE TRIGGER trg_validate_topology_incremental
+            BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
+            FOR EACH ROW
+            EXECUTE FUNCTION validate_topology_incremental()';
+    END IF;
+END $$;
 
 CREATE OR REPLACE FUNCTION autofix_small_holes_for_version(p_id_rel_geo_verzija uuid)
 RETURNS integer

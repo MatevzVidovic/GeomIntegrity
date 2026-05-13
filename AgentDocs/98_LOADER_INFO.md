@@ -17,7 +17,7 @@ The script loads functions and triggers in the correct dependency order:
    - `validate_holes(uuid)` - Find uncovered areas (luknja)
    - `validate_overflows(uuid)` - Find areas beyond boundary (preliv)
    - `validate_intersections(uuid)` - Find overlapping areas (prekrivanje)
-   - `validate_all(uuid)` - Run all validations for one version
+   - `validate_all_topologies_single_geo_version(uuid)` - Run all validations for one version
    - `validate_all_topologies()` - Run all validations for all versions
 
 3. **OBM Incremental Trigger** (`2_1_trg_obm_geom_trigger.sql`)
@@ -79,7 +79,7 @@ SELECT * FROM validate_all_topologies();
 SELECT * FROM validate_all_hierarchies();
 
 -- Or for a specific version
-SELECT * FROM validate_all('your-uuid-here');
+SELECT * FROM validate_all_topologies_single_geo_version('your-uuid-here');
 SELECT * FROM validate_all_hierarchy('your-uuid-here');
 ```
 

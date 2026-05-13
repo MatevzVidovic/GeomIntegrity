@@ -64,7 +64,7 @@ Kaj pomeni `problematicen_id` po tipu:
 ## Sprožanje kontrol
 
 - Polna validacija:
-  - OBM: `validate_all(uuid)`, `validate_all_topologies()`
+  - OBM: `validate_all_topologies_single_geo_version(uuid)`, `validate_all_topologies()`
   - hierarhija: `validate_all_hierarchy(uuid)`, `validate_all_hierarchies()`
 - Inkrementalno prek triggerjev:
   - `md_geo_obm` -> `validate_topology_incremental()`

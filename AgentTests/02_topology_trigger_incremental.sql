@@ -34,6 +34,7 @@ VALUES
     ('version', uuid_generate_v4()),
     ('model', uuid_generate_v4()),
     ('obm_out', uuid_generate_v4()),
+    ('overflow_version', uuid_generate_v4()),
     ('small_version_intersection', uuid_generate_v4()),
     ('small_model_intersection', uuid_generate_v4()),
     ('small_intersection_a', uuid_generate_v4()),
@@ -74,6 +75,17 @@ VALUES (
     false
 );
 
+INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='overflow_version'),
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    now()::timestamp,
+    99109,
+    false,
+    'AGENT_TEST_OVERFLOW',
+    false
+);
+
 INSERT INTO md_verzije_modeli (id, created_by, created_at, id_rel_geo_verzija, model, verzija)
 VALUES (
     (SELECT value FROM agent_ids WHERE key='model'),
@@ -105,7 +117,7 @@ SELECT pg_temp.assert_true(
     'Precision trigger should keep fixture OBM geometry on 0.01 grid'
 );
 
-SELECT * FROM validate_all((SELECT value FROM agent_ids WHERE key='version'));
+SELECT * FROM validate_all_topologies_single_geo_version((SELECT value FROM agent_ids WHERE key='version'));
 
 \i /Users/matevzvidovic/GeomIntegrity/Main/3_1_trg_obm_geom_trigger.sql
 
@@ -163,8 +175,8 @@ SELECT pg_temp.assert_true(
         FROM md_topoloske_kontrole_obm
         WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='version')
           AND tip_topoloskega_problema = 'luknja'
-    ) = 2,
-    'Inserting a strip through the hole should split it into two holes'
+    ) = CASE WHEN obm_small_topology_autofix_enabled() THEN 0 ELSE 2 END,
+    'Inserting a strip through the hole should split or autofix holes according to obm_small_topology_autofix_enabled()'
 );
 
 SELECT pg_temp.assert_true(
@@ -174,8 +186,8 @@ SELECT pg_temp.assert_true(
         WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='version')
           AND tip_topoloskega_problema = 'luknja'
           AND kompaktnost IS NOT NULL
-    ) = 2,
-    'Incremental insert-split holes should have compactness'
+    ) = CASE WHEN obm_small_topology_autofix_enabled() THEN 0 ELSE 2 END,
+    'Incremental insert-split hole compactness behavior should follow obm_small_topology_autofix_enabled()'
 );
 
 \echo 'Case: UPDATE fills split holes'
@@ -204,8 +216,8 @@ SELECT pg_temp.assert_true(
         FROM md_topoloske_kontrole_obm
         WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='version')
           AND tip_topoloskega_problema = 'prekrivanje'
-    ) = 1,
-    'Expanding obm2 should create one intersection record'
+    ) = CASE WHEN obm_small_topology_autofix_enabled() THEN 0 ELSE 1 END,
+    'Expanding obm2 intersection behavior should follow obm_small_topology_autofix_enabled()'
 );
 
 UPDATE md_geo_obm
@@ -228,7 +240,7 @@ VALUES (
     (SELECT value FROM agent_ids WHERE key='obm_out'),
     now()::timestamp,
     '00000000-0000-0000-0000-000000000000'::uuid,
-    (SELECT value FROM agent_ids WHERE key='version'),
+    (SELECT value FROM agent_ids WHERE key='overflow_version'),
     'T_OBM_OUT',
     ST_GeomFromText('POLYGON((2.5 2.5, 3.5 2.5, 3.5 3.5, 2.5 3.5, 2.5 2.5))', 3794)
 );

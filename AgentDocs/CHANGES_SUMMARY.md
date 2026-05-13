@@ -18,7 +18,7 @@
 3. **Updated validation function references (STEP 7)**
    - Changed from generic comment to specific function calls
    - Shows both single-version and all-versions options:
-     - `validate_all('uuid')` for single version
+     - `validate_all_topologies_single_geo_version('uuid')` for single version
      - `validate_all_topologies()` for all versions
 
 4. **Added hierarchy table creation (STEP 9)**

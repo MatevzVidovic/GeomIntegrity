@@ -287,9 +287,11 @@ END $$;
 -- This populates md_topoloske_kontrole_obm with all topology issues.
 
 -- For a single model version:
--- SELECT * FROM validate_all_single_geo_version('your-uuid-here');
+-- SELECT * FROM validate_all_topologies_single_geo_version('your-uuid-here');
 
 -- For all model versions:
+-- This also preprocesses OBM geometry:
+-- overflows are always clipped to slo_meja before controls are written.
 SELECT * FROM validate_all_topologies();
 
 
@@ -327,7 +329,7 @@ SELECT * FROM validate_all_hierarchies();
 --   SELECT * FROM validate_holes('uuid-here');
 --   SELECT * FROM validate_overflows('uuid-here');
 --   SELECT * FROM validate_intersections('uuid-here');
---   SELECT * FROM validate_all('uuid-here');
+--   SELECT * FROM validate_all_topologies_single_geo_version('uuid-here');
 
 -- For all model versions:
 --   SELECT * FROM validate_all_topologies();

@@ -134,9 +134,9 @@ AgentDocs/
 - `validate_holes(uuid)` - Find uncovered areas within Slovenia boundary
 - `validate_overflows(uuid)` - Find areas extending beyond Slovenia boundary
 - `validate_intersections(uuid)` - Find overlapping obmocja
-- `validate_all(uuid)` - Run all validations for a version
+- `validate_all_topologies_single_geo_version(uuid)` - Run all validations for a version
 - `validate_all_topologies()` - Run all validations for all versions
-- `validate_all(uuid)` returns a valid zero-count row for empty versions.
+- `validate_all_topologies_single_geo_version(uuid)` returns a valid zero-count row for empty versions.
 
 ### Incremental Trigger (2_1_trg_obm_geom_trigger.sql)
 - `validate_topology_incremental()` - Trigger function

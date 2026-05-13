@@ -279,9 +279,11 @@ $$;
 
 
 
+DROP FUNCTION IF EXISTS validate_all(uuid);
 DROP FUNCTION IF EXISTS validate_all_single_geo_version(uuid);
+DROP FUNCTION IF EXISTS validate_all_topologies_single_geo_version(uuid);
 
-CREATE OR REPLACE FUNCTION validate_all_single_geo_version(p_id_rel_geo_verzija uuid)
+CREATE OR REPLACE FUNCTION validate_all_topologies_single_geo_version(p_id_rel_geo_verzija uuid)
 RETURNS TABLE(
     chosen_id_rel_geo_verzija uuid,
     holes_found INTEGER,
@@ -295,6 +297,7 @@ DECLARE
     v_total_count INTEGER := 0;
     v_trigger_existed boolean;
     v_autofix_pass integer := 0;
+    v_autofix_overflows_fixed integer := 0;
     v_autofix_holes_fixed integer := 0;
     v_autofix_intersections_fixed integer := 0;
     v_autofix_total_fixed integer := 0;
@@ -335,7 +338,16 @@ BEGIN
         RETURN;
     END IF;
 
+    v_autofix_overflows_fixed := autofix_overflows_for_version(p_id_rel_geo_verzija);
+    IF v_autofix_overflows_fixed > 0 THEN
+        RAISE NOTICE
+            'OBM overflow autofix clipped % geometries for version %.',
+            v_autofix_overflows_fixed,
+            p_id_rel_geo_verzija;
+    END IF;
+
     IF obm_small_topology_autofix_enabled() THEN
+
         LOOP
             v_autofix_pass := v_autofix_pass + 1;
 
@@ -361,6 +373,7 @@ BEGIN
         END IF;
     END IF;
 
+
     holes_found := validate_holes(p_id_rel_geo_verzija);
     overflows_found := validate_overflows(p_id_rel_geo_verzija);
     intersections_found := validate_intersections(p_id_rel_geo_verzija);
@@ -381,9 +394,6 @@ BEGIN
                      v_total_count;
 END;
 $$;
-
-
-
 
 DROP FUNCTION IF EXISTS validate_all_topologies();
 
@@ -426,7 +436,7 @@ BEGIN
     LOOP
         RETURN QUERY
         SELECT *
-        FROM validate_all_single_geo_version(v_version);
+        FROM validate_all_topologies_single_geo_version(v_version);
     END LOOP;
 
     -- Reinstate trigger only if it existed before AND its function is defined
