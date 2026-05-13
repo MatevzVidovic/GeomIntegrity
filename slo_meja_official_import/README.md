@@ -20,6 +20,14 @@ export PGUSER=gurs_readwrite
 export PGPASSWORD='...'
 ```
 
+```bash
+export PGHOST=db.lift.gurs.sigov.si
+export PGPORT=5432
+export PGDATABASE=fmp_data_gurs
+export PGUSER=gurs_readwrite
+export PGPASSWORD='...'
+```
+
 Then run:
 
 ```bash

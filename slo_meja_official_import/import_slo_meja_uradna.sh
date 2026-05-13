@@ -18,8 +18,12 @@ if [[ ! -f "$SHP_PATH" ]]; then
   exit 1
 fi
 
+# echo "[1/2] Loading raw official border lines into ${RAW_SCHEMA}.${RAW_TABLE}"
+# shp2pgsql -d -s 3794 -I -W UTF-8 "$SHP_PATH" "${RAW_SCHEMA}.${RAW_TABLE}" \
+#   | psql -v ON_ERROR_STOP=1
+
 echo "[1/2] Loading raw official border lines into ${RAW_SCHEMA}.${RAW_TABLE}"
-shp2pgsql -d -s 3794 -I -W UTF-8 "$SHP_PATH" "${RAW_SCHEMA}.${RAW_TABLE}" \
+shp2pgsql -c -s 3794 -I -W UTF-8 "$SHP_PATH" "${RAW_SCHEMA}.${RAW_TABLE}" \
   | psql -v ON_ERROR_STOP=1
 
 echo "[2/2] Building official Slovenia boundary multipolygon in ${TARGET_SCHEMA}.${TARGET_TABLE}"

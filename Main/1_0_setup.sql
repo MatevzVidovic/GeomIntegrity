@@ -249,23 +249,25 @@ END $$;
 -- The slo_meja table stores the outer boundary of all obmocja combined.
 -- This is used to detect holes (uncovered areas) and overflows.
 
-TRUNCATE TABLE slo_meja;
+-- !!! Now slo_meja is imported from the official source in slo_meja_official_import/
 
-INSERT INTO slo_meja(id, created_at, created_by, geom)
-SELECT
-    uuid_generate_v4() AS id,
-    now()::timestamp,
-    '00000000-0000-0000-0000-000000000000',
-    ST_ReducePrecision(
-        ST_MakePolygon(ST_ExteriorRing(
-            ST_ReducePrecision(
-                ST_Union(md_geo_obm.geom),
-                0.01
-            )
-        )),
-        0.01
-    ) AS geom
-FROM md_geo_obm;
+-- TRUNCATE TABLE slo_meja;
+
+-- INSERT INTO slo_meja(id, created_at, created_by, geom)
+-- SELECT
+--     uuid_generate_v4() AS id,
+--     now()::timestamp,
+--     '00000000-0000-0000-0000-000000000000',
+--     ST_ReducePrecision(
+--         ST_MakePolygon(ST_ExteriorRing(
+--             ST_ReducePrecision(
+--                 ST_Union(md_geo_obm.geom),
+--                 0.01
+--             )
+--         )),
+--         0.01
+--     ) AS geom
+-- FROM md_geo_obm;
 
 SELECT * FROM validate_2_decimal_places();
 DO $$
