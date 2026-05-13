@@ -290,14 +290,14 @@ END $$;
 -- Final validation writes the topology state after preprocessing.
 
 -- For a single model version:
-SELECT * FROM validate_all_topologies_single_geo_version('71ffcc50-47f0-11f1-b7d9-0242ac12000d');
-SELECT * FROM autofix_overflows_and_maybe_autofix_small_napake_for_version('71ffcc50-47f0-11f1-b7d9-0242ac12000d');
-SELECT * FROM validate_all_topologies_single_geo_version('71ffcc50-47f0-11f1-b7d9-0242ac12000d');
+-- SELECT * FROM validate_all_topologies_single_geo_version('71ffcc50-47f0-11f1-b7d9-0242ac12000d');
+-- SELECT * FROM autofix_overflows_and_maybe_autofix_small_napake_for_version('71ffcc50-47f0-11f1-b7d9-0242ac12000d');
+-- SELECT * FROM validate_all_topologies_single_geo_version('71ffcc50-47f0-11f1-b7d9-0242ac12000d');
 
 -- For all model versions:
--- SELECT * FROM validate_all_topologies();
--- SELECT * FROM autofix_overflows_and_maybe_autofix_small_napake();
--- SELECT * FROM validate_all_topologies();
+SELECT * FROM validate_all_topologies();
+SELECT * FROM autofix_overflows_and_maybe_autofix_small_napake();
+SELECT * FROM validate_all_topologies();
 
 
 
