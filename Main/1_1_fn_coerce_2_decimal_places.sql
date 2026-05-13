@@ -83,12 +83,12 @@ RETURNS void
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    UPDATE md_geo_obm
-    SET geom = ST_ReducePrecision(geom, 0.01);
-    -- WHERE geom IS NOT NULL
-    --   AND NOT geom_is_on_2_decimal_grid(geom);
-
+    -- slo_meja is the canonical clipping/check boundary. Snap it first so all
+    -- following OBM topology operations use a 0.01-grid boundary.
     UPDATE slo_meja
+    SET geom = ST_ReducePrecision(geom, 0.01);
+
+    UPDATE md_geo_obm
     SET geom = ST_ReducePrecision(geom, 0.01);
     -- WHERE geom IS NOT NULL
     --   AND NOT geom_is_on_2_decimal_grid(geom);

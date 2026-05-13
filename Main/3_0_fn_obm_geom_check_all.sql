@@ -339,17 +339,18 @@ BEGIN
     END IF;
 
     v_autofix_overflows_fixed := autofix_overflows_for_version(p_id_rel_geo_verzija);
-    IF v_autofix_overflows_fixed > 0 THEN
-        RAISE NOTICE
-            'OBM overflow autofix clipped % geometries for version %.',
-            v_autofix_overflows_fixed,
-            p_id_rel_geo_verzija;
-    END IF;
+        IF v_autofix_overflows_fixed > 0 THEN
+            RAISE NOTICE
+                'OBM overflow autofix clipped % geometries for version %.',
+                v_autofix_overflows_fixed,
+                p_id_rel_geo_verzija;
+        END IF;
 
     IF obm_small_topology_autofix_enabled() THEN
 
         LOOP
             v_autofix_pass := v_autofix_pass + 1;
+            v_autofix_overflows_fixed := autofix_overflows_for_version(p_id_rel_geo_verzija);
 
             SELECT
                 fixes.holes_fixed,
@@ -361,27 +362,22 @@ BEGIN
                 v_autofix_total_fixed
             FROM autofix_small_obm_topology_for_version(p_id_rel_geo_verzija) fixes;
 
+            v_autofix_overflows_fixed := v_autofix_overflows_fixed
+                + autofix_overflows_for_version(p_id_rel_geo_verzija);
+            v_autofix_total_fixed := COALESCE(v_autofix_total_fixed, 0)
+                + COALESCE(v_autofix_overflows_fixed, 0);
+
             EXIT WHEN COALESCE(v_autofix_total_fixed, 0) = 0 OR v_autofix_pass >= 5;
         END LOOP;
 
-        -- repeat so we surely fix all overflows - even ones that might have been created in these autofixes
-        -- At this point the triggers arent on yet, so they dont get fixed yet.
-        v_autofix_overflows_fixed := autofix_overflows_for_version(p_id_rel_geo_verzija);
-        IF v_autofix_overflows_fixed > 0 THEN
-            RAISE NOTICE
-                'after autofix of holes and intersections: OBM overflow autofix clipped % geometries for version %.',
-                v_autofix_overflows_fixed,
-                p_id_rel_geo_verzija;
-        END IF;
-        
         IF COALESCE(v_autofix_total_fixed, 0) > 0 AND v_autofix_pass >= 5 THEN
             RAISE WARNING
-                'Small OBM topology autofix reached pass limit for version %. Last pass fixed % holes and % intersections.',
+                'OBM topology autofix reached pass limit for version %. Last pass fixed % overflows, % holes and % intersections.',
                 p_id_rel_geo_verzija,
+                v_autofix_overflows_fixed,
                 v_autofix_holes_fixed,
                 v_autofix_intersections_fixed;
         END IF;
-
 
     END IF;
 

@@ -232,6 +232,8 @@ TRUNCATE TABLE md_topoloske_kontrole_hierarhija;
 -- STEP 4: Ensure existing geometry data has 2 decimal place precision
 -- ============================================================================
 SELECT * FROM validate_2_decimal_places();
+-- set_to_2_decimal_places() snaps slo_meja first. That makes the official
+-- border the stable 0.01-grid boundary for overflow clipping and hole checks.
 SELECT * FROM set_to_2_decimal_places();
 SELECT * FROM validate_2_decimal_places();
 

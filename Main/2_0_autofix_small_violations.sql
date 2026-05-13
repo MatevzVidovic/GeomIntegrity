@@ -142,14 +142,18 @@ BEGIN
     WITH clipped AS (
         SELECT
             obm.id,
-            ST_Multi(
+            ST_Multi(ST_ReducePrecision(
                 ST_CollectionExtract(
                     ST_MakeValid(
-                        ST_ReducePrecision(ST_Intersection(obm.geom, v_slo_meja), 0.01)
+                        ST_ReducePrecision(
+                            ST_Intersection(ST_ReducePrecision(obm.geom, 0.01), v_slo_meja),
+                            0.01
+                        )
                     ),
                     3
-                )
-            )::geometry(MultiPolygon, 3794) AS geom
+                ),
+                0.01
+            ))::geometry(MultiPolygon, 3794) AS geom
         FROM md_geo_obm obm
         WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
           AND obm.geom IS NOT NULL
