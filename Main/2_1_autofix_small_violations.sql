@@ -293,10 +293,10 @@ BEGIN
             + COALESCE(v_intersections_fixed, 0)
             + COALESCE(v_reportable_overflows, 0);
 
-        EXIT WHEN v_last_pass_total = 0 OR v_pass >= 5;
+        EXIT WHEN v_last_pass_total = 0 OR v_pass >= 10;
     END LOOP;
 
-    IF v_last_pass_total > 0 AND v_pass >= 5 THEN
+    IF v_last_pass_total > 0 AND v_pass >= 10 THEN
         RAISE WARNING
             'OBM topology autofix reached pass limit for version %. Last pass left % reportable overflows and fixed % holes and % intersections.',
             p_id_rel_geo_verzija,
