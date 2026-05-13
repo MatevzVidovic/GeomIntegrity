@@ -64,6 +64,9 @@ VALUES
     ('full_small_intersection_version', uuid_generate_v4()),
     ('full_small_intersection_a', uuid_generate_v4()),
     ('full_small_intersection_b', uuid_generate_v4()),
+    ('full_preprocessing_wide_intersection_version', uuid_generate_v4()),
+    ('full_preprocessing_wide_intersection_a', uuid_generate_v4()),
+    ('full_preprocessing_wide_intersection_b', uuid_generate_v4()),
     ('full_small_intersection_disabled_version', uuid_generate_v4()),
     ('full_small_intersection_disabled_a', uuid_generate_v4()),
     ('full_small_intersection_disabled_b', uuid_generate_v4()),
@@ -326,6 +329,7 @@ VALUES
     ((SELECT value FROM agent_ids WHERE key='full_small_hole_version'), '00000000-0000-0000-0000-000000000000'::uuid, now()::timestamp, 99004, false, 'AGENT_TEST_FULL_SMALL_HOLE', false),
     ((SELECT value FROM agent_ids WHERE key='full_small_intersection_version'), '00000000-0000-0000-0000-000000000000'::uuid, now()::timestamp, 99005, false, 'AGENT_TEST_FULL_SMALL_INTERSECTION', false),
     ((SELECT value FROM agent_ids WHERE key='full_small_intersection_disabled_version'), '00000000-0000-0000-0000-000000000000'::uuid, now()::timestamp, 99006, false, 'AGENT_TEST_FULL_SMALL_INTERSECTION_DISABLED', false),
+    ((SELECT value FROM agent_ids WHERE key='full_preprocessing_wide_intersection_version'), '00000000-0000-0000-0000-000000000000'::uuid, now()::timestamp, 99010, false, 'AGENT_TEST_FULL_PREPROCESSING_WIDE_INTERSECTION', false),
     ((SELECT value FROM agent_ids WHERE key='full_overflow_version'), '00000000-0000-0000-0000-000000000000'::uuid, now()::timestamp, 99009, false, 'AGENT_TEST_FULL_OVERFLOW', false);
 
 INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
@@ -436,7 +440,61 @@ SELECT pg_temp.assert_true(
     'Second validate_all small intersection case should follow obm_small_topology_autofix_enabled()'
 );
 
+\echo 'Case: preprocessing uses wider small-topology threshold than live trigger'
+TRUNCATE TABLE slo_meja;
+INSERT INTO slo_meja (id, created_at, created_by, geom)
+VALUES (
+    uuid_generate_v4(),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    ST_GeomFromText('POLYGON((0 0, 1000 0, 1000 10, 0 10, 0 0))', 3794)
+);
+
+SELECT pg_temp.assert_true(
+    preprocessing_is_small_obm_topology_problem(ST_GeomFromText('POLYGON((0 0, 500 0, 500 0.4, 0 0.4, 0 0))', 3794))
+    AND NOT is_small_obm_topology_problem(ST_GeomFromText('POLYGON((0 0, 500 0, 500 0.4, 0 0.4, 0 0))', 3794)),
+    'Preprocessing predicate should classify a 200m2 skinny overlap as small while live predicate should not'
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES
+    ((SELECT value FROM agent_ids WHERE key='full_preprocessing_wide_intersection_a'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='full_preprocessing_wide_intersection_version'), 'FULL_PREPROCESSING_WIDE_INTERSECTION_A', ST_GeomFromText('POLYGON((0 0, 500 0, 500 1, 0 1, 0 0))', 3794)),
+    ((SELECT value FROM agent_ids WHERE key='full_preprocessing_wide_intersection_b'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='full_preprocessing_wide_intersection_version'), 'FULL_PREPROCESSING_WIDE_INTERSECTION_B', ST_GeomFromText('POLYGON((0 0.6, 500 0.6, 500 2, 0 2, 0 0.6))', 3794));
+
+SELECT * FROM validate_all_topologies_single_geo_version((SELECT value FROM agent_ids WHERE key='full_preprocessing_wide_intersection_version'));
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*) = CASE WHEN obm_small_topology_autofix_enabled() THEN 0 ELSE 1 END
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='full_preprocessing_wide_intersection_version')
+          AND tip_topoloskega_problema = 'prekrivanje'
+    ),
+    'validate_all preprocessing wide intersection behavior should follow obm_small_topology_autofix_enabled()'
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT CASE
+            WHEN obm_small_topology_autofix_enabled() THEN abs(SUM(ST_Area(geom)) - 1000) < 1e-6
+            ELSE abs(SUM(ST_Area(geom)) - 1200) < 1e-6
+        END
+        FROM md_geo_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='full_preprocessing_wide_intersection_version')
+    ),
+    'validate_all preprocessing wide intersection geometry should follow obm_small_topology_autofix_enabled()'
+);
+
 \echo 'Test group: explicit all-version small topology autofix'
+
+TRUNCATE TABLE slo_meja;
+INSERT INTO slo_meja (id, created_at, created_by, geom)
+VALUES (
+    uuid_generate_v4(),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))', 3794)
+);
 
 INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
 VALUES

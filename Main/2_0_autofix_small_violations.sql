@@ -5,8 +5,11 @@
 -- Small violations are geometry slivers we fix immediately instead of writing
 -- them into md_topoloske_kontrole_obm.
 --
--- Rule:
+-- Live trigger rule:
 --   ST_Area(geom) < 10 OR (ST_Area(geom) < 100 AND compactness < 0.01)
+--
+-- Preprocessing/full-validation rule:
+--   ST_Area(geom) < 10 OR (ST_Area(geom) < 1000 AND compactness < 0.01)
 --
 -- These helpers are used by the OBM incremental trigger. They are intentionally
 -- not implemented as triggers on md_topoloske_kontrole_obm, because that would
@@ -20,6 +23,7 @@ DROP FUNCTION IF EXISTS autofix_small_holes_for_version(uuid);
 DROP FUNCTION IF EXISTS autofix_overflows_all_versions();
 DROP FUNCTION IF EXISTS autofix_overflows_for_version(uuid);
 DROP FUNCTION IF EXISTS find_best_obm_neighbor_for_hole(uuid, geometry, uuid);
+DROP FUNCTION IF EXISTS preprocessing_is_small_obm_topology_problem(geometry);
 DROP FUNCTION IF EXISTS is_small_obm_topology_problem(geometry);
 DROP FUNCTION IF EXISTS obm_topology_compactness(geometry);
 DROP FUNCTION IF EXISTS obm_small_topology_autofix_enabled();
@@ -62,6 +66,32 @@ AS $$
             WHERE area < 10
                 OR (
                     area < 100
+                    AND compactness < 0.01
+                )
+        ),
+        false
+    );
+$$;
+
+CREATE OR REPLACE FUNCTION preprocessing_is_small_obm_topology_problem(p_geom geometry)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+AS $$
+    WITH metrics AS (
+        SELECT
+            ST_Area(p_geom) AS area,
+            obm_topology_compactness(p_geom) AS compactness
+        WHERE p_geom IS NOT NULL
+        AND NOT ST_IsEmpty(p_geom)
+    )
+    SELECT COALESCE(
+        EXISTS (
+            SELECT 1
+            FROM metrics
+            WHERE area < 10
+                OR (
+                    area < 1000
                     AND compactness < 0.01
                 )
         ),
@@ -221,7 +251,7 @@ BEGIN
            OR ST_IsEmpty(v_hole_geom)
            OR ST_Area(v_hole_geom) <= 0
            OR ST_GeometryType(v_hole_geom) NOT IN ('ST_Polygon', 'ST_MultiPolygon')
-           OR NOT is_small_obm_topology_problem(v_hole_geom) THEN
+           OR NOT preprocessing_is_small_obm_topology_problem(v_hole_geom) THEN
             CONTINUE;
         END IF;
 
@@ -283,7 +313,7 @@ BEGIN
     FROM temp_autofix_small_intersections
     WHERE ST_GeometryType(intersection_geom) IN ('ST_Polygon', 'ST_MultiPolygon')
       AND ST_Area(intersection_geom) > 0
-      AND is_small_obm_topology_problem(intersection_geom);
+      AND preprocessing_is_small_obm_topology_problem(intersection_geom);
 
     FOR v_target IN
         SELECT
@@ -292,7 +322,7 @@ BEGIN
         FROM temp_autofix_small_intersections
         WHERE ST_GeometryType(intersection_geom) IN ('ST_Polygon', 'ST_MultiPolygon')
           AND ST_Area(intersection_geom) > 0
-          AND is_small_obm_topology_problem(intersection_geom)
+          AND preprocessing_is_small_obm_topology_problem(intersection_geom)
         GROUP BY id_b
     LOOP
         SELECT ST_ReducePrecision(ST_Difference(obm.geom, v_target.geom_to_remove), 0.01)

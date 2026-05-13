@@ -47,7 +47,10 @@ VALUES
     ('small_model_hole', uuid_generate_v4()),
     ('small_hole_left', uuid_generate_v4()),
     ('small_hole_strip', uuid_generate_v4()),
-    ('small_hole_right', uuid_generate_v4());
+    ('small_hole_right', uuid_generate_v4()),
+    ('live_wide_intersection_version', uuid_generate_v4()),
+    ('live_wide_intersection_a', uuid_generate_v4()),
+    ('live_wide_intersection_b', uuid_generate_v4());
 
 INSERT INTO agent_ids (key, value)
 SELECT 'obm' || gs::text, uuid_generate_v4()
@@ -463,6 +466,66 @@ SELECT pg_temp.assert_true(
         WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='small_version_hole')
     ),
     'Delete-created small hole should not mutate another OBM from the row trigger'
+);
+
+\echo 'Case: live trigger keeps stricter small-topology threshold than preprocessing'
+TRUNCATE TABLE slo_meja;
+INSERT INTO slo_meja (id, created_at, created_by, geom)
+VALUES (
+    uuid_generate_v4(),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    ST_GeomFromText('POLYGON((0 0, 1000 0, 1000 10, 0 10, 0 0))', 3794)
+);
+
+INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='live_wide_intersection_version'),
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    now()::timestamp,
+    99110,
+    false,
+    'AGENT_TEST_LIVE_WIDE_INTERSECTION',
+    false
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='live_wide_intersection_a'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='live_wide_intersection_version'),
+    'T_LIVE_WIDE_INTERSECTION_A',
+    ST_GeomFromText('POLYGON((0 0, 500 0, 500 1, 0 1, 0 0))', 3794)
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='live_wide_intersection_b'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='live_wide_intersection_version'),
+    'T_LIVE_WIDE_INTERSECTION_B',
+    ST_GeomFromText('POLYGON((0 0.6, 500 0.6, 500 2, 0 2, 0 0.6))', 3794)
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*) = 1
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='live_wide_intersection_version')
+          AND tip_topoloskega_problema = 'prekrivanje'
+    ),
+    'Live trigger should report the 200m2 skinny overlap because only preprocessing uses the wider threshold'
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT abs(SUM(ST_Area(geom)) - 1200) < 1e-6
+        FROM md_geo_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='live_wide_intersection_version')
+    ),
+    'Live trigger should not autofix the 200m2 skinny overlap'
 );
 
 \echo 'All assertions passed for AgentTests 02'
