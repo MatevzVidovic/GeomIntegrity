@@ -331,6 +331,7 @@ BEGIN
     FOR v_version IN
         SELECT DISTINCT md_geo_obm.id_rel_geo_verzija
         FROM md_geo_obm
+        -- WHERE md_geo_obm.id_rel_geo_verzija = '71ffcc50-47f0-11f1-b7d9-0242ac12000d'
         ORDER BY md_geo_obm.id_rel_geo_verzija
     LOOP
         RETURN QUERY
