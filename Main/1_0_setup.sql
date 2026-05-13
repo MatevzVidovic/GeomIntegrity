@@ -11,8 +11,7 @@
 --   - slo_meja table exists (for Slovenia boundary)
 --   - md_topoloske_kontrole_obm table exists
 --
--- After running this setup, run validate_all_topologies() to populate
--- the initial topology controls.
+-- Setup runs initial validation, preprocessing/autofix, and final validation.
 -- ============================================================================
 
 
@@ -286,15 +285,19 @@ END $$;
 -- ============================================================================
 -- STEP 6: Run initial topology validation
 -- ============================================================================
--- This populates md_topoloske_kontrole_obm with all topology issues.
+-- First validation writes the topology state before preprocessing.
+-- Then preprocessing clips overflows and optionally fixes small holes/intersections.
+-- Final validation writes the topology state after preprocessing.
 
 -- For a single model version:
--- SELECT * FROM validate_all_topologies_single_geo_version('your-uuid-here');
+SELECT * FROM validate_all_topologies_single_geo_version('71ffcc50-47f0-11f1-b7d9-0242ac12000d');
+SELECT * FROM autofix_overflows_and_maybe_autofix_small_napake_for_version('71ffcc50-47f0-11f1-b7d9-0242ac12000d');
+SELECT * FROM validate_all_topologies_single_geo_version('71ffcc50-47f0-11f1-b7d9-0242ac12000d');
 
 -- For all model versions:
--- This also preprocesses OBM geometry:
--- overflows are always clipped to slo_meja before controls are written.
-SELECT * FROM validate_all_topologies();
+-- SELECT * FROM validate_all_topologies();
+-- SELECT * FROM autofix_overflows_and_maybe_autofix_small_napake();
+-- SELECT * FROM validate_all_topologies();
 
 
 

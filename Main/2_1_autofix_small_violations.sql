@@ -16,6 +16,8 @@
 -- update md_geo_obm while the md_geo_obm trigger is already running.
 -- ============================================================================
 
+DROP FUNCTION IF EXISTS autofix_overflows_and_maybe_autofix_small_napake();
+DROP FUNCTION IF EXISTS autofix_overflows_and_maybe_autofix_small_napake_for_version(uuid);
 DROP FUNCTION IF EXISTS autofix_small_obm_topology_all_versions();
 DROP FUNCTION IF EXISTS autofix_small_obm_topology_for_version(uuid);
 DROP FUNCTION IF EXISTS autofix_small_intersections_for_version(uuid);
@@ -232,6 +234,138 @@ BEGIN
     total_fixed := holes_fixed + intersections_fixed;
 
     RETURN NEXT;
+END $$;
+
+CREATE OR REPLACE FUNCTION autofix_overflows_and_maybe_autofix_small_napake_for_version(p_id_rel_geo_verzija uuid)
+RETURNS TABLE(
+    chosen_id_rel_geo_verzija uuid,
+    passes integer,
+    reportable_overflows integer,
+    holes_fixed integer,
+    intersections_fixed integer,
+    total_fixed integer
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_pass integer := 0;
+    v_reportable_overflows integer := 0;
+    v_holes_fixed integer := 0;
+    v_intersections_fixed integer := 0;
+    v_last_pass_total integer := 0;
+    v_total_holes_fixed integer := 0;
+    v_total_intersections_fixed integer := 0;
+    v_trigger_existed boolean;
+BEGIN
+    SELECT EXISTS (
+        SELECT 1 FROM pg_trigger t
+        JOIN pg_class c ON t.tgrelid = c.oid
+        WHERE t.tgname = 'trg_validate_topology_incremental'
+          AND c.relname = 'md_geo_obm'
+    ) INTO v_trigger_existed;
+
+    IF v_trigger_existed THEN
+        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm';
+    END IF;
+
+    LOOP
+        v_pass := v_pass + 1;
+
+        PERFORM autofix_overflows_for_version(p_id_rel_geo_verzija);
+
+        IF obm_small_topology_autofix_enabled() THEN
+            SELECT
+                fixes.holes_fixed,
+                fixes.intersections_fixed
+            INTO
+                v_holes_fixed,
+                v_intersections_fixed
+            FROM autofix_small_obm_topology_for_version(p_id_rel_geo_verzija) fixes;
+        ELSE
+            v_holes_fixed := 0;
+            v_intersections_fixed := 0;
+        END IF;
+
+        v_reportable_overflows := autofix_overflows_for_version(p_id_rel_geo_verzija);
+        v_total_holes_fixed := v_total_holes_fixed + COALESCE(v_holes_fixed, 0);
+        v_total_intersections_fixed := v_total_intersections_fixed + COALESCE(v_intersections_fixed, 0);
+        v_last_pass_total := COALESCE(v_holes_fixed, 0)
+            + COALESCE(v_intersections_fixed, 0)
+            + COALESCE(v_reportable_overflows, 0);
+
+        EXIT WHEN v_last_pass_total = 0 OR v_pass >= 5;
+    END LOOP;
+
+    IF v_last_pass_total > 0 AND v_pass >= 5 THEN
+        RAISE WARNING
+            'OBM topology autofix reached pass limit for version %. Last pass left % reportable overflows and fixed % holes and % intersections.',
+            p_id_rel_geo_verzija,
+            v_reportable_overflows,
+            v_holes_fixed,
+            v_intersections_fixed;
+    END IF;
+
+    IF v_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_topology_incremental') THEN
+        EXECUTE '
+            CREATE TRIGGER trg_validate_topology_incremental
+            BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
+            FOR EACH ROW
+            EXECUTE FUNCTION validate_topology_incremental()';
+    END IF;
+
+    RETURN QUERY SELECT
+        p_id_rel_geo_verzija,
+        v_pass,
+        v_reportable_overflows,
+        v_total_holes_fixed,
+        v_total_intersections_fixed,
+        v_total_holes_fixed + v_total_intersections_fixed + v_reportable_overflows;
+END $$;
+
+CREATE OR REPLACE FUNCTION autofix_overflows_and_maybe_autofix_small_napake()
+RETURNS TABLE(
+    chosen_id_rel_geo_verzija uuid,
+    passes integer,
+    reportable_overflows integer,
+    holes_fixed integer,
+    intersections_fixed integer,
+    total_fixed integer
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_version uuid;
+    v_trigger_existed boolean;
+BEGIN
+    SELECT EXISTS (
+        SELECT 1 FROM pg_trigger t
+        JOIN pg_class c ON t.tgrelid = c.oid
+        WHERE t.tgname = 'trg_validate_topology_incremental'
+          AND c.relname = 'md_geo_obm'
+    ) INTO v_trigger_existed;
+
+    IF v_trigger_existed THEN
+        EXECUTE 'DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm';
+    END IF;
+
+    FOR v_version IN
+        SELECT DISTINCT obm.id_rel_geo_verzija
+        FROM md_geo_obm obm
+        WHERE obm.id_rel_geo_verzija IS NOT NULL
+        ORDER BY obm.id_rel_geo_verzija
+    LOOP
+        RETURN QUERY
+        SELECT *
+        FROM autofix_overflows_and_maybe_autofix_small_napake_for_version(v_version);
+    END LOOP;
+
+    IF v_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_topology_incremental') THEN
+        EXECUTE '
+            CREATE TRIGGER trg_validate_topology_incremental
+            BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
+            FOR EACH ROW
+            EXECUTE FUNCTION validate_topology_incremental()';
+    END IF;
 END $$;
 
 -- only meant for manual running .The validate_all_topologies fn does what this fn does by itself already
