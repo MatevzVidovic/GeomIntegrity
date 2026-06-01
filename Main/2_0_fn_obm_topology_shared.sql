@@ -1,8 +1,36 @@
 -- ============================================================================
 -- 2_0_fn_obm_topology_shared.sql - Shared OBM Topology Helpers
 -- ============================================================================
--- Shared read-only helpers used by OBM validation, autofix, and triggers.
+-- Shared helpers used by OBM validation, autofix, and triggers.
 -- ============================================================================
+
+CREATE OR REPLACE FUNCTION ensure_snap_to_grid(
+  geom     geometry,
+  gridsize float8 DEFAULT 0.01
+)
+RETURNS geometry
+LANGUAGE plpgsql
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+DECLARE
+  cleaned geometry;
+BEGIN
+  -- 1. Snap to grid (does the actual collapse of slivers) + clean self-intersections
+  cleaned := ST_MakeValid(ST_SnapToGrid(geom, gridsize));
+
+  -- 2. Keep only polygonal parts, drop the line/point debris
+  cleaned := ST_CollectionExtract(cleaned, 3);
+
+  -- 3. Bail out if the whole thing collapsed
+  IF cleaned IS NULL OR ST_IsEmpty(cleaned) OR ST_Area(cleaned) = 0 THEN
+    RETURN NULL;
+  END IF;
+
+  -- 4. Dissolve internal parts, then snap the new union nodes back onto the grid
+  RETURN ST_MakeValid(ST_ReducePrecision(ST_Union(cleaned), gridsize));
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION obm_small_topology_autofix_enabled()
 RETURNS boolean
