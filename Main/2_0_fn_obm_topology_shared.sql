@@ -1,36 +1,8 @@
 -- ============================================================================
 -- 2_0_fn_obm_topology_shared.sql - Shared OBM Topology Helpers
 -- ============================================================================
--- Shared helpers used by OBM validation, autofix, and triggers.
+-- Shared read-only helpers used by OBM validation, autofix, and triggers.
 -- ============================================================================
-
-CREATE OR REPLACE FUNCTION ensure_snap_to_grid(
-  geom     geometry,
-  gridsize float8 DEFAULT 0.01
-)
-RETURNS geometry
-LANGUAGE plpgsql
-IMMUTABLE
-PARALLEL SAFE
-AS $$
-DECLARE
-  cleaned geometry;
-BEGIN
-  -- 1. Snap to grid (does the actual collapse of slivers) + clean self-intersections
-  cleaned := ST_MakeValid(ST_SnapToGrid(geom, gridsize));
-
-  -- 2. Keep only polygonal parts, drop the line/point debris
-  cleaned := ST_CollectionExtract(cleaned, 3);
-
-  -- 3. Bail out if the whole thing collapsed
-  IF cleaned IS NULL OR ST_IsEmpty(cleaned) OR ST_Area(cleaned) = 0 THEN
-    RETURN NULL;
-  END IF;
-
-  -- 4. Dissolve internal parts, then snap the new union nodes back onto the grid
-  RETURN ST_MakeValid(ST_ReducePrecision(ST_Union(cleaned), gridsize));
-END;
-$$;
 
 CREATE OR REPLACE FUNCTION obm_small_topology_autofix_enabled()
 RETURNS boolean
@@ -168,7 +140,7 @@ BEGIN
         ST_Area(hole.geom) AS povrsina,
         obm_topology_compactness(hole.geom) AS kompaktnost
     FROM (
-        SELECT ST_ReducePrecision((dump_result).geom, 0.01) AS geom
+        SELECT ensure_snap_to_grid((dump_result).geom) AS geom
         FROM (
             SELECT ST_Dump(v_holes_geom) AS dump_result
         ) dumps
@@ -207,7 +179,7 @@ BEGIN
     FROM (
         SELECT
             obm.id AS obm_id,
-            ST_ReducePrecision((ST_Dump(ST_Difference(obm.geom, v_slo_meja))).geom, 0.01) AS geom
+            ensure_snap_to_grid((ST_Dump(ST_Difference(obm.geom, v_slo_meja))).geom) AS geom
         FROM md_geo_obm obm
         WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
           AND obm.geom IS NOT NULL

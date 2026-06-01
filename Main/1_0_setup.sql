@@ -260,15 +260,13 @@ END $$;
 --     uuid_generate_v4() AS id,
 --     now()::timestamp,
 --     '00000000-0000-0000-0000-000000000000',
---     ST_ReducePrecision(
+--     ST_Multi(ensure_snap_to_grid(
 --         ST_MakePolygon(ST_ExteriorRing(
---             ST_ReducePrecision(
---                 ST_Union(md_geo_obm.geom),
---                 0.01
+--             ensure_snap_to_grid(
+--                 ST_Union(md_geo_obm.geom)
 --             )
---         )),
---         0.01
---     ) AS geom
+--         ))
+--     ))::geometry(MultiPolygon, 3794) AS geom
 -- FROM md_geo_obm;
 
 SELECT * FROM validate_2_decimal_places();

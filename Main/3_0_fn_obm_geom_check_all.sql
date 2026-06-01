@@ -118,7 +118,7 @@ BEGIN
     SELECT
         a.id,
         b.id,
-        st_reduceprecision((ST_Dump(ST_Intersection(a.geom, b.geom))).geom, 0.01) as intersection_geom
+        ensure_snap_to_grid((ST_Dump(ST_Intersection(a.geom, b.geom))).geom) as intersection_geom
 --         ST_Intersection(a.geom, b.geom) as intersection_geom
     FROM md_geo_obm a
     JOIN md_geo_obm b ON a.id_rel_geo_verzija = b.id_rel_geo_verzija

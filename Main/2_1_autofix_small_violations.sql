@@ -46,17 +46,8 @@ BEGIN
     WITH clipped AS (
         SELECT
             obm.id,
-            ST_Multi(ST_ReducePrecision(
-                ST_CollectionExtract(
-                    ST_MakeValid(
-                        ST_ReducePrecision(
-                            ST_Intersection(ST_ReducePrecision(obm.geom, 0.01), v_slo_meja),
-                            0.01
-                        )
-                    ),
-                    3
-                ),
-                0.01
+            ST_Multi(ensure_snap_to_grid(
+                ST_Intersection(ensure_snap_to_grid(obm.geom), v_slo_meja)
             ))::geometry(MultiPolygon, 3794) AS geom
         FROM md_geo_obm obm
         WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
@@ -146,13 +137,17 @@ BEGIN
             CONTINUE;
         END IF;
 
-        SELECT ST_ReducePrecision(ST_Union(obm.geom, v_hole_geom), 0.01)
+        SELECT ensure_snap_to_grid(ST_Union(obm.geom, v_hole_geom))
         INTO v_fixed_geom
         FROM md_geo_obm obm
         WHERE obm.id = v_best_neighbor_id;
 
+        IF v_fixed_geom IS NULL THEN
+            CONTINUE;
+        END IF;
+
         UPDATE md_geo_obm
-        SET geom = ST_Multi(ST_ReducePrecision(v_fixed_geom, 0.01))
+        SET geom = ST_Multi(v_fixed_geom)::geometry(MultiPolygon, 3794)
         WHERE id = v_best_neighbor_id;
 
         v_fixed_count := v_fixed_count + 1;
@@ -181,7 +176,7 @@ BEGIN
     SELECT
         a.id,
         b.id,
-        ST_ReducePrecision((ST_Dump(ST_Intersection(a.geom, b.geom))).geom, 0.01)
+        ensure_snap_to_grid((ST_Dump(ST_Intersection(a.geom, b.geom))).geom)
     FROM md_geo_obm a
     JOIN md_geo_obm b ON a.id_rel_geo_verzija = b.id_rel_geo_verzija
     WHERE a.id_rel_geo_verzija = p_id_rel_geo_verzija
@@ -199,20 +194,24 @@ BEGIN
     FOR v_target IN
         SELECT
             id_b,
-            ST_ReducePrecision(ST_Union(intersection_geom), 0.01) AS geom_to_remove
+            ensure_snap_to_grid(ST_Union(intersection_geom)) AS geom_to_remove
         FROM temp_autofix_small_intersections
         WHERE ST_GeometryType(intersection_geom) IN ('ST_Polygon', 'ST_MultiPolygon')
           AND ST_Area(intersection_geom) > 0
           AND preprocessing_is_small_obm_topology_problem(intersection_geom)
         GROUP BY id_b
     LOOP
-        SELECT ST_ReducePrecision(ST_Difference(obm.geom, v_target.geom_to_remove), 0.01)
+        SELECT ensure_snap_to_grid(ST_Difference(obm.geom, v_target.geom_to_remove))
         INTO v_fixed_geom
         FROM md_geo_obm obm
         WHERE obm.id = v_target.id_b;
 
+        IF v_fixed_geom IS NULL THEN
+            CONTINUE;
+        END IF;
+
         UPDATE md_geo_obm
-        SET geom = ST_Multi(ST_ReducePrecision(v_fixed_geom, 0.01))
+        SET geom = ST_Multi(v_fixed_geom)::geometry(MultiPolygon, 3794)
         WHERE id = v_target.id_b;
 
     END LOOP;
