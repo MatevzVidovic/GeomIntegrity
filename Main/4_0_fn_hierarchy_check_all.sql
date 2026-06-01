@@ -19,6 +19,7 @@
 --
 -- Problem types:
 --   - 'obm. v nobeni coni': An OBM exists but is not assigned to any cona
+--   - 'obm. v več conah': An OBM is assigned to multiple conas or has duplicate obmxcona rows
 --   - 'napačno obm.': obmxcona references an OBM that doesn't exist
 --   - 'cona ne obstaja': obmxcona references a cona that doesn't exist
 --   - 'cona brez obm.': A cona exists but has no OBMs assigned
@@ -46,6 +47,7 @@ RETURNS TABLE(
     missing_obms INTEGER,
     orphan_obm_refs INTEGER,
     orphan_cona_refs INTEGER,
+    multi_cona_obms INTEGER,
     empty_conas INTEGER
 )
 LANGUAGE plpgsql
@@ -54,6 +56,7 @@ DECLARE
     v_missing_obms INTEGER := 0;
     v_orphan_obm_refs INTEGER := 0;
     v_orphan_cona_refs INTEGER := 0;
+    v_multi_cona_obms INTEGER := 0;
     v_empty_conas INTEGER := 0;
     v_id_rel_geo_verzija UUID;
 BEGIN
@@ -63,7 +66,7 @@ BEGIN
     WHERE id = p_id_rel_verzije_modeli;
 
     IF v_id_rel_geo_verzija IS NULL THEN
-        RETURN QUERY SELECT 0, 0, 0, 0;
+        RETURN QUERY SELECT 0, 0, 0, 0, 0;
         RETURN;
     END IF;
 
@@ -145,7 +148,38 @@ BEGIN
       );
     GET DIAGNOSTICS v_orphan_cona_refs = ROW_COUNT;
 
-    -- 4. Find conas with no OBMs (for this model version)
+    -- 4. Find valid obmxcona rows when one OBM is linked more than once.
+    --    This includes both multiple conas and duplicated rows for the same obm/cona pair.
+    --    problematicen_id = every involved obmxcona row so the user can choose which relation to fix.
+    INSERT INTO md_topoloske_kontrole_hierarhija (
+        id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
+        tip_entitete, tip_problema, problematicen_id
+    )
+    SELECT
+        uuid_generate_v4(),
+        now()::timestamp,
+        '00000000-0000-0000-0000-000000000000'::uuid,
+        p_id_rel_verzije_modeli,
+        v_id_rel_geo_verzija,
+        'cona',
+        'obm. v več conah',
+        counted.xc_id
+    FROM (
+        SELECT
+            xc.id AS xc_id,
+            count(*) OVER (
+                PARTITION BY xc.id_rel_geo_obm
+            ) AS relation_count
+        FROM md_geo_obmxcona xc
+        JOIN md_geo_obm obm ON obm.id = xc.id_rel_geo_obm
+        JOIN md_geo_cona c ON c.id = xc.id_rel_geo_cona
+        WHERE obm.id_rel_geo_verzija = v_id_rel_geo_verzija
+          AND c.id_rel_verzije_modeli = p_id_rel_verzije_modeli
+    ) counted
+    WHERE counted.relation_count > 1;
+    GET DIAGNOSTICS v_multi_cona_obms = ROW_COUNT;
+
+    -- 5. Find conas with no OBMs (for this model version)
     INSERT INTO md_topoloske_kontrole_hierarhija (
         id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
         tip_entitete, tip_problema, problematicen_id
@@ -167,7 +201,7 @@ BEGIN
       );
     GET DIAGNOSTICS v_empty_conas = ROW_COUNT;
 
-    RETURN QUERY SELECT v_missing_obms, v_orphan_obm_refs, v_orphan_cona_refs, v_empty_conas;
+    RETURN QUERY SELECT v_missing_obms, v_orphan_obm_refs, v_orphan_cona_refs, v_multi_cona_obms, v_empty_conas;
 END;
 $$;
 
@@ -397,6 +431,7 @@ RETURNS TABLE(
     cona_missing_obms INTEGER,
     cona_orphan_obm_refs INTEGER,
     cona_orphan_cona_refs INTEGER,
+    cona_multi_cona_obms INTEGER,
     cona_empty INTEGER,
     lao_missing_conas INTEGER,
     lao_orphan_refs INTEGER,
@@ -421,6 +456,7 @@ BEGIN
         v_cona_results.missing_obms,
         v_cona_results.orphan_obm_refs,
         v_cona_results.orphan_cona_refs,
+        v_cona_results.multi_cona_obms,
         v_cona_results.empty_conas,
         v_lao_results.missing_conas,
         v_lao_results.orphan_lao_refs,
@@ -448,6 +484,7 @@ $$;
 --     cona_missing_obms INTEGER,
 --     cona_orphan_obm_refs INTEGER,
 --     cona_orphan_cona_refs INTEGER,
+--     cona_multi_cona_obms INTEGER,
 --     cona_empty INTEGER,
 --     lao_missing_conas INTEGER,
 --     lao_orphan_refs INTEGER,
@@ -526,6 +563,7 @@ $$;
 --         v_cona_results.missing_obms,
 --         v_cona_results.orphan_obm_refs,
 --         v_cona_results.orphan_cona_refs,
+--         v_cona_results.multi_cona_obms,
 --         v_cona_results.empty_conas,
 --         v_lao_results.missing_conas,
 --         v_lao_results.orphan_lao_refs,
@@ -550,6 +588,7 @@ RETURNS TABLE(
     cona_missing_obms INTEGER,
     cona_orphan_obm_refs INTEGER,
     cona_orphan_cona_refs INTEGER,
+    cona_multi_cona_obms INTEGER,
     cona_empty INTEGER,
     lao_missing_conas INTEGER,
     lao_orphan_refs INTEGER,
@@ -637,5 +676,3 @@ BEGIN
     -- END IF;
 END;
 $$;
-
-

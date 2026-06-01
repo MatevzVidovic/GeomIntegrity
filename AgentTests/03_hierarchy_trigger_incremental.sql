@@ -24,6 +24,17 @@ BEGIN
 END;
 $$;
 
+-- Keep tests rollback-safe even when the target DB has not run the latest setup.
+ALTER TABLE md_topoloske_kontrole_hierarhija
+DROP CONSTRAINT IF EXISTS check_tip_problema_hierarhija;
+ALTER TABLE md_topoloske_kontrole_hierarhija
+ADD CONSTRAINT check_tip_problema_hierarhija
+CHECK (tip_problema IN (
+    'obm. v nobeni coni', 'obm. v več conah', 'napačno obm.', 'cona ne obstaja', 'cona brez obm.',
+    'cona v nobenem LAO', 'LAO ne obstaja', 'LAO brez cone',
+    'LAO v nobenem TAO', 'TAO ne obstaja', 'TAO brez LAO'
+));
+
 DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm;
 
 CREATE TEMP TABLE agent_ids (
@@ -44,9 +55,13 @@ VALUES
     ('cona1', uuid_generate_v4()),
     ('cona2', uuid_generate_v4()),
     ('fake_cona', uuid_generate_v4()),
+    ('stale_problem1', uuid_generate_v4()),
+    ('stale_problem2', uuid_generate_v4()),
+    ('link_duplicate_cona', uuid_generate_v4()),
     ('obm1', uuid_generate_v4()),
     ('obm2', uuid_generate_v4()),
-    ('obm3', uuid_generate_v4());
+    ('obm3', uuid_generate_v4()),
+    ('obm4', uuid_generate_v4());
 
 TRUNCATE TABLE slo_meja;
 INSERT INTO slo_meja (id, created_at, created_by, geom)
@@ -99,6 +114,123 @@ VALUES
 SELECT * FROM validate_all_hierarchy((SELECT value FROM agent_ids WHERE key='model1'));
 SELECT * FROM validate_all_hierarchy((SELECT value FROM agent_ids WHERE key='model2'));
 
+\echo 'Case: obm INSERT trigger creates missing cona issue'
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='obm4'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='version1'),
+    'H_OBM_4',
+    ST_GeomFromText('POLYGON((2 0, 3 0, 3 1, 2 1, 2 0))', 3794)
+);
+
+SELECT pg_temp.assert_true(
+    EXISTS (
+        SELECT 1 FROM md_topoloske_kontrole_hierarhija
+        WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
+          AND tip_problema = 'obm. v nobeni coni'
+          AND problematicen_id = (SELECT value FROM agent_ids WHERE key='obm4')
+    ),
+    'INSERT on md_geo_obm should create obm. v nobeni coni via hierarchy trigger'
+);
+
+INSERT INTO md_geo_obmxcona (id, created_at, created_by, id_rel_geo_obm, id_rel_geo_cona)
+VALUES (
+    uuid_generate_v4(),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='obm4'),
+    (SELECT value FROM agent_ids WHERE key='cona1')
+);
+
+SELECT pg_temp.assert_true(
+    NOT EXISTS (
+        SELECT 1 FROM md_topoloske_kontrole_hierarhija
+        WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
+          AND tip_problema = 'obm. v nobeni coni'
+          AND problematicen_id = (SELECT value FROM agent_ids WHERE key='obm4')
+    ),
+    'INSERT on obmxcona should clear obm. v nobeni coni created by OBM insert'
+);
+
+\echo 'Case: obm version UPDATE revalidates old and new model versions'
+INSERT INTO md_topoloske_kontrole_hierarhija (
+    id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
+    tip_entitete, tip_problema, problematicen_id
+)
+VALUES
+    (
+        uuid_generate_v4(),
+        now()::timestamp,
+        '00000000-0000-0000-0000-000000000000'::uuid,
+        (SELECT value FROM agent_ids WHERE key='model1'),
+        (SELECT value FROM agent_ids WHERE key='version1'),
+        'cona',
+        'obm. v nobeni coni',
+        (SELECT value FROM agent_ids WHERE key='stale_problem1')
+    ),
+    (
+        uuid_generate_v4(),
+        now()::timestamp,
+        '00000000-0000-0000-0000-000000000000'::uuid,
+        (SELECT value FROM agent_ids WHERE key='model2'),
+        (SELECT value FROM agent_ids WHERE key='version2'),
+        'cona',
+        'obm. v nobeni coni',
+        (SELECT value FROM agent_ids WHERE key='stale_problem2')
+    );
+
+UPDATE md_geo_obm
+SET id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='version1')
+WHERE id = (SELECT value FROM agent_ids WHERE key='obm3');
+
+SELECT pg_temp.assert_true(
+    NOT EXISTS (
+        SELECT 1 FROM md_topoloske_kontrole_hierarhija
+        WHERE problematicen_id IN (
+            (SELECT value FROM agent_ids WHERE key='stale_problem1'),
+            (SELECT value FROM agent_ids WHERE key='stale_problem2')
+        )
+    ),
+    'UPDATE md_geo_obm.id_rel_geo_verzija should revalidate both old and new model versions'
+);
+
+UPDATE md_geo_obm
+SET id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='version2')
+WHERE id = (SELECT value FROM agent_ids WHERE key='obm3');
+
+\echo 'Case: obm geometry UPDATE does not run hierarchy validation'
+INSERT INTO md_topoloske_kontrole_hierarhija (
+    id, created_at, created_by, id_rel_verzije_modeli, id_rel_geo_verzija,
+    tip_entitete, tip_problema, problematicen_id
+)
+VALUES (
+    uuid_generate_v4(),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='model1'),
+    (SELECT value FROM agent_ids WHERE key='version1'),
+    'cona',
+    'obm. v nobeni coni',
+    (SELECT value FROM agent_ids WHERE key='stale_problem1')
+);
+
+UPDATE md_geo_obm
+SET geom = ST_GeomFromText('POLYGON((0 0, 1 0, 1 1.1, 0 1.1, 0 0))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='obm1');
+
+SELECT pg_temp.assert_true(
+    EXISTS (
+        SELECT 1 FROM md_topoloske_kontrole_hierarhija
+        WHERE problematicen_id = (SELECT value FROM agent_ids WHERE key='stale_problem1')
+    ),
+    'UPDATE md_geo_obm.geom should not fire OBM hierarchy trigger'
+);
+
+DELETE FROM md_topoloske_kontrole_hierarhija
+WHERE problematicen_id = (SELECT value FROM agent_ids WHERE key='stale_problem1');
+
 \echo 'Case: obmxcona DELETE and INSERT trigger'
 DELETE FROM md_geo_obmxcona
 WHERE id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm2')
@@ -130,6 +262,81 @@ SELECT pg_temp.assert_true(
           AND tip_problema = 'obm. v nobeni coni'
     ) = 0,
     'INSERT on obmxcona should clear obm. v nobeni coni after restoration'
+);
+
+\echo 'Case: obmxcona duplicate INSERT/DELETE trigger'
+INSERT INTO md_geo_obmxcona (id, created_at, created_by, id_rel_geo_obm, id_rel_geo_cona)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='link_duplicate_cona'),
+    now()::timestamp + interval '1 second',
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='obm1'),
+    (SELECT value FROM agent_ids WHERE key='cona1')
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*)
+        FROM md_topoloske_kontrole_hierarhija
+        WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
+          AND tip_problema = 'obm. v več conah'
+          AND problematicen_id IN (
+              (SELECT id FROM md_geo_obmxcona
+               WHERE id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm1')
+                 AND id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona1')
+                 AND id <> (SELECT value FROM agent_ids WHERE key='link_duplicate_cona')),
+              (SELECT value FROM agent_ids WHERE key='link_duplicate_cona')
+          )
+    ) = 2,
+    'INSERT duplicate obmxcona should create obm. v več conah for all involved relations'
+);
+
+DELETE FROM md_geo_obmxcona
+WHERE id = (SELECT value FROM agent_ids WHERE key='link_duplicate_cona');
+
+SELECT pg_temp.assert_true(
+    NOT EXISTS (
+        SELECT 1 FROM md_topoloske_kontrole_hierarhija
+        WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
+          AND tip_problema = 'obm. v več conah'
+    ),
+    'DELETE duplicate obmxcona should clear obm. v več conah'
+);
+
+\echo 'Case: obmxcona UPDATE creates and clears duplicate relation'
+UPDATE md_geo_obmxcona
+SET id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm1'),
+    updated_at = now()::timestamp + interval '2 seconds'
+WHERE id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm2')
+  AND id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona1');
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*)
+        FROM md_topoloske_kontrole_hierarhija h
+        JOIN md_geo_obmxcona xc ON xc.id = h.problematicen_id
+        WHERE h.id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
+          AND h.tip_problema = 'obm. v več conah'
+          AND xc.id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm1')
+          AND xc.id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona1')
+    ) = 2,
+    'UPDATE obmxcona to duplicate relation should create obm. v več conah for all involved relations'
+);
+
+UPDATE md_geo_obmxcona
+SET id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm2'),
+    updated_at = NULL
+WHERE id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm1')
+  AND id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona1')
+  AND updated_at = now()::timestamp + interval '2 seconds';
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*) FROM md_topoloske_kontrole_hierarhija
+        WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
+          AND tip_problema IN ('obm. v več conah', 'obm. v nobeni coni')
+    ) = 0,
+    'Restoring updated duplicate relation should clear obm. v več conah and missing OBM'
 );
 
 \echo 'Case: obmxcona UPDATE to non-existent cona revalidates source model'

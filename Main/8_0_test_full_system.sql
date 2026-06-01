@@ -268,6 +268,7 @@ FROM generate_series(7, 9) i;
 
 -- Disable triggers temporarily
 DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm;
+DROP TRIGGER IF EXISTS trg_validate_obm_hierarchy_incremental ON md_geo_obm;
 DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona;
 DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona;
 DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao;

@@ -191,7 +191,7 @@ BEGIN
     ALTER TABLE md_topoloske_kontrole_hierarhija
     ADD CONSTRAINT check_tip_problema_hierarhija
     CHECK (tip_problema IN (
-        'obm. v nobeni coni', 'napačno obm.', 'cona ne obstaja', 'cona brez obm.',
+        'obm. v nobeni coni', 'obm. v več conah', 'napačno obm.', 'cona ne obstaja', 'cona brez obm.',
         'cona v nobenem LAO', 'LAO ne obstaja', 'LAO brez cone',
         'LAO v nobenem TAO', 'TAO ne obstaja', 'TAO brez LAO'
     ));
@@ -206,6 +206,7 @@ END $$;
 -- ============================================================================
 -- Keep trg_000_coerce_obm_geom_2_decimal_places active.
 DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm;
+DROP TRIGGER IF EXISTS trg_validate_obm_hierarchy_incremental ON md_geo_obm;
 DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona;
 DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona;
 DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao;

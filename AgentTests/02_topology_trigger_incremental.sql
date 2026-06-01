@@ -66,6 +66,7 @@ VALUES (
 );
 
 DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm;
+DROP TRIGGER IF EXISTS trg_validate_obm_hierarchy_incremental ON md_geo_obm;
 
 INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
 VALUES (

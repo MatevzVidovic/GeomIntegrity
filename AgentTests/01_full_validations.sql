@@ -24,7 +24,19 @@ BEGIN
 END;
 $$;
 
+-- Keep tests rollback-safe even when the target DB has not run the latest setup.
+ALTER TABLE md_topoloske_kontrole_hierarhija
+DROP CONSTRAINT IF EXISTS check_tip_problema_hierarhija;
+ALTER TABLE md_topoloske_kontrole_hierarhija
+ADD CONSTRAINT check_tip_problema_hierarhija
+CHECK (tip_problema IN (
+    'obm. v nobeni coni', 'obm. v več conah', 'napačno obm.', 'cona ne obstaja', 'cona brez obm.',
+    'cona v nobenem LAO', 'LAO ne obstaja', 'LAO brez cone',
+    'LAO v nobenem TAO', 'TAO ne obstaja', 'TAO brez LAO'
+));
+
 DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm;
+DROP TRIGGER IF EXISTS trg_validate_obm_hierarchy_incremental ON md_geo_obm;
 DROP TRIGGER IF EXISTS trg_validate_obmxcona_incremental ON md_geo_obmxcona;
 DROP TRIGGER IF EXISTS trg_validate_cona_lao_incremental ON md_geo_cona;
 DROP TRIGGER IF EXISTS trg_validate_lao_tao_incremental ON md_geo_lao;
@@ -58,6 +70,8 @@ VALUES
     ('fake_tao', uuid_generate_v4()),
     ('link_orphan_obm', uuid_generate_v4()),
     ('link_orphan_cona', uuid_generate_v4()),
+    ('link_multi_cona', uuid_generate_v4()),
+    ('link_duplicate_cona', uuid_generate_v4()),
     ('full_small_hole_version', uuid_generate_v4()),
     ('full_small_hole_left', uuid_generate_v4()),
     ('full_small_hole_right', uuid_generate_v4()),
@@ -554,7 +568,11 @@ SELECT pg_temp.assert_true(
 SELECT pg_temp.assert_true(
     EXISTS (
         SELECT 1 FROM validate_cona_hierarchy((SELECT value FROM agent_ids WHERE key='model1')) r
-        WHERE r.missing_obms = 0 AND r.orphan_obm_refs = 0 AND r.orphan_cona_refs = 0 AND r.empty_conas = 0
+        WHERE r.missing_obms = 0
+          AND r.orphan_obm_refs = 0
+          AND r.orphan_cona_refs = 0
+          AND r.multi_cona_obms = 0
+          AND r.empty_conas = 0
     ),
     'validate_cona_hierarchy baseline should be clean'
 );
@@ -563,7 +581,11 @@ DELETE FROM md_geo_obmxcona WHERE id_rel_geo_obm = (SELECT value FROM agent_ids 
 SELECT pg_temp.assert_true(
     EXISTS (
         SELECT 1 FROM validate_cona_hierarchy((SELECT value FROM agent_ids WHERE key='model1')) r
-        WHERE r.missing_obms = 1 AND r.orphan_obm_refs = 0 AND r.orphan_cona_refs = 0 AND r.empty_conas = 0
+        WHERE r.missing_obms = 1
+          AND r.orphan_obm_refs = 0
+          AND r.orphan_cona_refs = 0
+          AND r.multi_cona_obms = 0
+          AND r.empty_conas = 0
     ),
     'obm. v nobeni coni should be detected after unlinking obm3'
 );
@@ -637,6 +659,71 @@ SELECT pg_temp.assert_true(
 );
 DELETE FROM md_geo_obmxcona WHERE id = (SELECT value FROM agent_ids WHERE key='link_orphan_cona');
 
+INSERT INTO md_geo_obmxcona (id, created_at, created_by, id_rel_geo_obm, id_rel_geo_cona)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='link_multi_cona'),
+    now()::timestamp + interval '1 second',
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='obm1'),
+    (SELECT value FROM agent_ids WHERE key='cona2')
+);
+SELECT pg_temp.assert_true(
+    EXISTS (
+        SELECT 1 FROM validate_cona_hierarchy((SELECT value FROM agent_ids WHERE key='model1')) r
+        WHERE r.multi_cona_obms = 2
+    ),
+    'obm. v več conah should be detected when one OBM is linked to two conas'
+);
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*)
+        FROM md_topoloske_kontrole_hierarhija
+        WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
+          AND tip_problema = 'obm. v več conah'
+          AND problematicen_id IN (
+              (SELECT id FROM md_geo_obmxcona
+               WHERE id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm1')
+                 AND id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona1')),
+              (SELECT value FROM agent_ids WHERE key='link_multi_cona')
+          )
+    ) = 2,
+    'obm. v več conah: problematicen_id should include all involved obmxcona row ids'
+);
+DELETE FROM md_geo_obmxcona WHERE id = (SELECT value FROM agent_ids WHERE key='link_multi_cona');
+
+INSERT INTO md_geo_obmxcona (id, created_at, created_by, id_rel_geo_obm, id_rel_geo_cona)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='link_duplicate_cona'),
+    now()::timestamp + interval '1 second',
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='obm1'),
+    (SELECT value FROM agent_ids WHERE key='cona1')
+);
+SELECT pg_temp.assert_true(
+    EXISTS (
+        SELECT 1 FROM validate_cona_hierarchy((SELECT value FROM agent_ids WHERE key='model1')) r
+        WHERE r.multi_cona_obms = 2
+    ),
+    'obm. v več conah should be detected for duplicate obmxcona rows'
+);
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*)
+        FROM md_topoloske_kontrole_hierarhija
+        WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
+          AND tip_problema = 'obm. v več conah'
+          AND problematicen_id IN (
+              (SELECT id FROM md_geo_obmxcona
+               WHERE id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm1')
+                 AND id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona1')
+                 AND id <> (SELECT value FROM agent_ids WHERE key='link_duplicate_cona')),
+              (SELECT value FROM agent_ids WHERE key='link_duplicate_cona')
+          )
+    ) = 2,
+    'duplicate obmxcona rows should all be reported as obm. v več conah'
+);
+DELETE FROM md_geo_obmxcona WHERE id = (SELECT value FROM agent_ids WHERE key='link_duplicate_cona');
+
 DELETE FROM md_geo_obmxcona WHERE id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona3');
 SELECT pg_temp.assert_true(
     EXISTS (
@@ -654,7 +741,11 @@ FROM generate_series(7, 9) AS gs;
 SELECT pg_temp.assert_true(
     EXISTS (
         SELECT 1 FROM validate_cona_hierarchy((SELECT value FROM agent_ids WHERE key='fake_model')) r
-        WHERE r.missing_obms = 0 AND r.orphan_obm_refs = 0 AND r.orphan_cona_refs = 0 AND r.empty_conas = 0
+        WHERE r.missing_obms = 0
+          AND r.orphan_obm_refs = 0
+          AND r.orphan_cona_refs = 0
+          AND r.multi_cona_obms = 0
+          AND r.empty_conas = 0
     ),
     'validate_cona_hierarchy should return all zeros for non-existing model'
 );
@@ -847,6 +938,7 @@ SELECT pg_temp.assert_true(
           AND r.cona_missing_obms = 0
           AND r.cona_orphan_obm_refs = 0
           AND r.cona_orphan_cona_refs = 0
+          AND r.cona_multi_cona_obms = 0
           AND r.cona_empty = 0
           AND r.lao_missing_conas = 0
           AND r.lao_orphan_refs = 0

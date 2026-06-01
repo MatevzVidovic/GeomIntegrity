@@ -158,7 +158,7 @@ flowchart TD
 
 What each function checks:
 
-- `validate_cona_hierarchy`: OBMs missing conas, bad OBM references, bad cona references, empty conas.
+- `validate_cona_hierarchy`: OBMs missing conas, OBMs in multiple/duplicate conas, bad OBM references, bad cona references, empty conas.
 - `validate_lao_hierarchy`: conas missing LAO, bad LAO references, empty LAOs.
 - `validate_tao_hierarchy`: LAOs missing TAO, bad TAO references, empty TAOs.
 
@@ -215,4 +215,3 @@ Keep this split:
 - Incremental path: trigger function calls `validate_all_hierarchy`.
 - Single-version validation: no `DROP TRIGGER`, no `CREATE TRIGGER`.
 - Bulk validation: `validate_all_hierarchies` may manage triggers around the full loop.
-
