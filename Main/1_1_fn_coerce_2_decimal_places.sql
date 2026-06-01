@@ -19,6 +19,17 @@ AS $$
 DECLARE
     cleaned geometry;
 BEGIN
+
+    -- ST_ReducePrecision forces valid geom. 
+    -- It can let things go to empty if all vertices of a polygon are inside one grid cell (still valid); 
+    -- but especially for long, thin polygons (slivers) it will try to inflate them.
+    -- -- I suspect ST_Difference also has small rounding errors which cause 
+    -- extremely tiny slivers that ST_ReducePrecision would then inflate.
+
+    -- ST_ReducePrecision wont let polygons become invalid.
+    -- ST_SnapToGrid still has very small float errors in GEOSS 3.9
+    -- Combine both so things actually work.
+
     IF p_geom IS NULL OR ST_IsEmpty(p_geom) THEN
         RETURN NULL;
     END IF;
