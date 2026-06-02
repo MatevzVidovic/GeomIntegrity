@@ -292,17 +292,22 @@ BEGIN
             + COALESCE(v_intersections_fixed, 0)
             + COALESCE(v_reportable_overflows, 0);
 
-        EXIT WHEN v_last_pass_total = 0 OR v_pass >= 10;
+        EXIT WHEN v_last_pass_total = 0 OR v_pass >= 3;
     END LOOP;
 
-    IF v_last_pass_total > 0 AND v_pass >= 10 THEN
+    IF v_last_pass_total > 0 AND v_pass >= 3 THEN
         RAISE WARNING
-            'OBM topology autofix reached pass limit for version %. Last pass left % reportable overflows and fixed % holes and % intersections.',
-            p_id_rel_geo_verzija,
-            v_reportable_overflows,
-            v_holes_fixed,
-            v_intersections_fixed;
+            'OBM topology autofix reached pass limit for version %.',
+            p_id_rel_geo_verzija;
     END IF;
+
+    RAISE NOTICE
+        'Version % took % passes. Last pass left % reportable overflows and fixed % holes and % intersections.',
+        p_id_rel_geo_verzija,
+        v_pass,
+        v_reportable_overflows,
+        v_holes_fixed,
+        v_intersections_fixed;
 
     IF v_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_topology_incremental') THEN
         EXECUTE '
