@@ -29,6 +29,9 @@ DROP FUNCTION IF EXISTS autofix_overflows_for_version(uuid);
 -- Autofixing everything at once - for after validate_all_topologies:
 -- ########################################
 
+-- Clips OBMs to slo_meja for one OBM version.
+-- Returns how many reportable overflows remain after clipping.
+-- Does not fix holes or intersections.
 CREATE OR REPLACE FUNCTION autofix_overflows_for_version(p_id_rel_geo_verzija uuid)
 RETURNS integer
 LANGUAGE plpgsql
@@ -70,6 +73,8 @@ BEGIN
     RETURN v_remaining_count;
 END $$;
 
+-- Manual/debug helper for clipping overflows in all OBM versions.
+-- This is not the full setup autofix path because it skips small holes/intersections.
 CREATE OR REPLACE FUNCTION autofix_overflows_all_versions()
 RETURNS TABLE(
     chosen_id_rel_geo_verzija uuid,
@@ -112,6 +117,10 @@ BEGIN
     END IF;
 END $$;
 
+-- Fixes preprocessing-small holes for one OBM version.
+-- Each current hole is assigned to the best neighboring OBM and unioned into it.
+-- Holes are recomputed after every changed geometry to avoid stale candidates.
+-- Returns actual changed md_geo_obm row count.
 CREATE OR REPLACE FUNCTION autofix_small_holes_for_version(p_id_rel_geo_verzija uuid)
 RETURNS integer
 LANGUAGE plpgsql
@@ -191,6 +200,10 @@ BEGIN
     RETURN v_fixed_count;
 END $$;
 
+-- Fixes preprocessing-small pairwise OBM overlaps for one OBM version.
+-- The overlap is subtracted from one side of each pair/group.
+-- Intersections are recomputed after every iteration to avoid stale candidates.
+-- Returns actual changed md_geo_obm row count, not candidate count.
 CREATE OR REPLACE FUNCTION autofix_small_intersections_for_version(p_id_rel_geo_verzija uuid)
 RETURNS integer
 LANGUAGE plpgsql
@@ -290,6 +303,10 @@ BEGIN
     RETURN v_fixed_count;
 END $$;
 
+-- Convenience wrapper for small topology only.
+-- Runs small-hole and small-intersection fixes for one version.
+-- Does not clip overflows and does not run the full convergence loop.
+-- Use autofix_overflows_and_maybe_autofix_small_napake_for_version for setup.
 CREATE OR REPLACE FUNCTION autofix_small_obm_topology_for_version(p_id_rel_geo_verzija uuid)
 RETURNS TABLE(
     holes_fixed integer,
@@ -306,6 +323,10 @@ BEGIN
     RETURN NEXT;
 END $$;
 
+-- Main per-version setup/autofix orchestrator.
+-- Runs overflow clipping, optional small hole/intersection autofix, then overflow clipping again.
+-- Repeats because clipping and small topology fixes can expose each other's remaining problems.
+-- This is the function to use when one OBM version should converge before final validation.
 CREATE OR REPLACE FUNCTION autofix_overflows_and_maybe_autofix_small_napake_for_version(p_id_rel_geo_verzija uuid)
 RETURNS TABLE(
     chosen_id_rel_geo_verzija uuid,
@@ -426,6 +447,8 @@ BEGIN
         v_total_holes_fixed + v_total_intersections_fixed + v_reportable_overflows;
 END $$;
 
+-- All-version setup entrypoint used by 1_0_setup.sql.
+-- Calls the per-version orchestrator for every OBM version.
 CREATE OR REPLACE FUNCTION autofix_overflows_and_maybe_autofix_small_napake()
 RETURNS TABLE(
     chosen_id_rel_geo_verzija uuid,
@@ -472,7 +495,9 @@ BEGIN
     END IF;
 END $$;
 
--- only meant for manual running .The validate_all_topologies fn does what this fn does by itself already
+-- Manual/debug helper only.
+-- Runs only small topology fixes for all versions.
+-- Not equivalent to full setup because it skips overflow clipping and convergence orchestration.
 CREATE OR REPLACE FUNCTION autofix_small_obm_topology_all_versions()
 RETURNS TABLE(
     chosen_id_rel_geo_verzija uuid,
