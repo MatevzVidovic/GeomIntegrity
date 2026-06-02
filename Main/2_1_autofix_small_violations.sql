@@ -121,12 +121,22 @@ DECLARE
     v_best_neighbor_id uuid;
     v_fixed_geom geometry;
     v_fixed_count integer := 0;
+    v_row_count integer := 0;
+    v_iteration integer := 0;
 BEGIN
-    FOR v_hole_geom IN
+    LOOP
+        v_iteration := v_iteration + 1;
+        v_hole_geom := NULL;
+
         SELECT candidates.hole_geom
+        INTO v_hole_geom
         FROM get_obm_hole_candidates(p_id_rel_geo_verzija) candidates
         WHERE preprocessing_is_small_obm_topology_problem(candidates.hole_geom)
-    LOOP
+        ORDER BY candidates.povrsina DESC, candidates.obseg DESC
+        LIMIT 1;
+
+        EXIT WHEN v_hole_geom IS NULL;
+
         v_best_neighbor_id := find_best_obm_neighbor_for_hole(
             p_id_rel_geo_verzija,
             v_hole_geom,
@@ -134,7 +144,10 @@ BEGIN
         );
 
         IF v_best_neighbor_id IS NULL THEN
-            CONTINUE;
+            RAISE WARNING
+                'Small OBM hole autofix found no neighbor for version %.',
+                p_id_rel_geo_verzija;
+            EXIT;
         END IF;
 
         SELECT ensure_snap_to_grid(ST_Union(obm.geom, v_hole_geom))
@@ -143,14 +156,36 @@ BEGIN
         WHERE obm.id = v_best_neighbor_id;
 
         IF v_fixed_geom IS NULL THEN
-            CONTINUE;
+            RAISE WARNING
+                'Small OBM hole autofix produced empty geometry for version %, OBM %.',
+                p_id_rel_geo_verzija,
+                v_best_neighbor_id;
+            EXIT;
         END IF;
 
         UPDATE md_geo_obm
         SET geom = ST_Multi(v_fixed_geom)::geometry(MultiPolygon, 3794)
-        WHERE id = v_best_neighbor_id;
+        WHERE id = v_best_neighbor_id
+          AND NOT ST_Equals(geom, v_fixed_geom);
+
+        GET DIAGNOSTICS v_row_count = ROW_COUNT;
+
+        IF v_row_count = 0 THEN
+            RAISE WARNING
+                'Small OBM hole autofix made no geometry change for version %, OBM %.',
+                p_id_rel_geo_verzija,
+                v_best_neighbor_id;
+            EXIT;
+        END IF;
 
         v_fixed_count := v_fixed_count + 1;
+
+        IF v_iteration >= 1000 THEN
+            RAISE WARNING
+                'Small OBM hole autofix reached iteration guard for version %.',
+                p_id_rel_geo_verzija;
+            EXIT;
+        END IF;
     END LOOP;
 
     RETURN v_fixed_count;
@@ -164,56 +199,92 @@ DECLARE
     v_target record;
     v_fixed_geom geometry;
     v_fixed_count integer := 0;
+    v_iteration integer := 0;
+    v_iteration_changed integer := 0;
+    v_row_count integer := 0;
+    v_candidate_count integer := 0;
 BEGIN
-    DROP TABLE IF EXISTS temp_autofix_small_intersections;
-    CREATE TEMP TABLE temp_autofix_small_intersections (
-        id_a uuid,
-        id_b uuid,
-        intersection_geom geometry
-    ) ON COMMIT DROP;
+    IF to_regclass('pg_temp.temp_autofix_small_intersections') IS NULL THEN
+        CREATE TEMP TABLE temp_autofix_small_intersections (
+            id_a uuid,
+            id_b uuid,
+            intersection_geom geometry
+        ) ON COMMIT DROP;
+    ELSE
+        TRUNCATE temp_autofix_small_intersections;
+    END IF;
 
-    INSERT INTO temp_autofix_small_intersections (id_a, id_b, intersection_geom)
-    SELECT
-        a.id,
-        b.id,
-        ensure_snap_to_grid((ST_Dump(ST_Intersection(a.geom, b.geom))).geom)
-    FROM md_geo_obm a
-    JOIN md_geo_obm b ON a.id_rel_geo_verzija = b.id_rel_geo_verzija
-    WHERE a.id_rel_geo_verzija = p_id_rel_geo_verzija
-      AND a.id < b.id
-      AND ST_Intersects(a.geom, b.geom)
-      AND NOT ST_Touches(a.geom, b.geom);
+    LOOP
+        v_iteration := v_iteration + 1;
+        v_iteration_changed := 0;
 
-    SELECT COUNT(*)
-    INTO v_fixed_count
-    FROM temp_autofix_small_intersections
-    WHERE ST_GeometryType(intersection_geom) IN ('ST_Polygon', 'ST_MultiPolygon')
-      AND ST_Area(intersection_geom) > 0
-      AND preprocessing_is_small_obm_topology_problem(intersection_geom);
+        TRUNCATE temp_autofix_small_intersections;
 
-    FOR v_target IN
+        INSERT INTO temp_autofix_small_intersections (id_a, id_b, intersection_geom)
         SELECT
-            id_b,
-            ensure_snap_to_grid(ST_Union(intersection_geom)) AS geom_to_remove
+            a.id,
+            b.id,
+            ensure_snap_to_grid((ST_Dump(ST_Intersection(a.geom, b.geom))).geom)
+        FROM md_geo_obm a
+        JOIN md_geo_obm b ON a.id_rel_geo_verzija = b.id_rel_geo_verzija
+        WHERE a.id_rel_geo_verzija = p_id_rel_geo_verzija
+          AND a.id < b.id
+          AND ST_Intersects(a.geom, b.geom)
+          AND NOT ST_Touches(a.geom, b.geom);
+
+        SELECT COUNT(*)
+        INTO v_candidate_count
         FROM temp_autofix_small_intersections
         WHERE ST_GeometryType(intersection_geom) IN ('ST_Polygon', 'ST_MultiPolygon')
           AND ST_Area(intersection_geom) > 0
-          AND preprocessing_is_small_obm_topology_problem(intersection_geom)
-        GROUP BY id_b
-    LOOP
-        SELECT ensure_snap_to_grid(ST_Difference(obm.geom, v_target.geom_to_remove))
-        INTO v_fixed_geom
-        FROM md_geo_obm obm
-        WHERE obm.id = v_target.id_b;
+          AND preprocessing_is_small_obm_topology_problem(intersection_geom);
 
-        IF v_fixed_geom IS NULL THEN
-            CONTINUE;
+        EXIT WHEN v_candidate_count = 0;
+
+        FOR v_target IN
+            SELECT
+                id_b,
+                ensure_snap_to_grid(ST_Union(intersection_geom)) AS geom_to_remove
+            FROM temp_autofix_small_intersections
+            WHERE ST_GeometryType(intersection_geom) IN ('ST_Polygon', 'ST_MultiPolygon')
+              AND ST_Area(intersection_geom) > 0
+              AND preprocessing_is_small_obm_topology_problem(intersection_geom)
+            GROUP BY id_b
+        LOOP
+            SELECT ensure_snap_to_grid(ST_Difference(obm.geom, v_target.geom_to_remove))
+            INTO v_fixed_geom
+            FROM md_geo_obm obm
+            WHERE obm.id = v_target.id_b;
+
+            IF v_fixed_geom IS NULL THEN
+                CONTINUE;
+            END IF;
+
+            UPDATE md_geo_obm
+            SET geom = ST_Multi(v_fixed_geom)::geometry(MultiPolygon, 3794)
+            WHERE id = v_target.id_b
+              AND NOT ST_Equals(geom, v_fixed_geom);
+
+            GET DIAGNOSTICS v_row_count = ROW_COUNT;
+            v_iteration_changed := v_iteration_changed + v_row_count;
+        END LOOP;
+
+        IF v_iteration_changed = 0 THEN
+            RAISE WARNING
+                'Small OBM intersection autofix found % candidates but made no geometry changes for version %.',
+                v_candidate_count,
+                p_id_rel_geo_verzija;
+            EXIT;
         END IF;
 
-        UPDATE md_geo_obm
-        SET geom = ST_Multi(v_fixed_geom)::geometry(MultiPolygon, 3794)
-        WHERE id = v_target.id_b;
+        v_fixed_count := v_fixed_count + v_iteration_changed;
 
+        IF v_iteration >= 1000 THEN
+            RAISE WARNING
+                'Small OBM intersection autofix reached iteration guard for version %.',
+                p_id_rel_geo_verzija;
+            EXIT;
+        END IF;
     END LOOP;
 
     RETURN v_fixed_count;
@@ -254,6 +325,8 @@ DECLARE
     v_last_pass_total integer := 0;
     v_total_holes_fixed integer := 0;
     v_total_intersections_fixed integer := 0;
+    v_remaining_small_holes integer := 0;
+    v_remaining_small_intersections integer := 0;
     v_trigger_existed boolean;
 BEGIN
     SELECT EXISTS (
@@ -288,14 +361,41 @@ BEGIN
         v_reportable_overflows := autofix_overflows_for_version(p_id_rel_geo_verzija);
         v_total_holes_fixed := v_total_holes_fixed + COALESCE(v_holes_fixed, 0);
         v_total_intersections_fixed := v_total_intersections_fixed + COALESCE(v_intersections_fixed, 0);
-        v_last_pass_total := COALESCE(v_holes_fixed, 0)
-            + COALESCE(v_intersections_fixed, 0)
+
+        IF obm_small_topology_autofix_enabled() THEN
+            SELECT COUNT(*)
+            INTO v_remaining_small_holes
+            FROM get_obm_hole_candidates(p_id_rel_geo_verzija) candidates
+            WHERE preprocessing_is_small_obm_topology_problem(candidates.hole_geom);
+
+            WITH small_intersections AS (
+                SELECT ensure_snap_to_grid((ST_Dump(ST_Intersection(a.geom, b.geom))).geom) AS geom
+                FROM md_geo_obm a
+                JOIN md_geo_obm b ON a.id_rel_geo_verzija = b.id_rel_geo_verzija
+                WHERE a.id_rel_geo_verzija = p_id_rel_geo_verzija
+                  AND a.id < b.id
+                  AND ST_Intersects(a.geom, b.geom)
+                  AND NOT ST_Touches(a.geom, b.geom)
+            )
+            SELECT COUNT(*)
+            INTO v_remaining_small_intersections
+            FROM small_intersections
+            WHERE ST_GeometryType(geom) IN ('ST_Polygon', 'ST_MultiPolygon')
+              AND ST_Area(geom) > 0
+              AND preprocessing_is_small_obm_topology_problem(geom);
+        ELSE
+            v_remaining_small_holes := 0;
+            v_remaining_small_intersections := 0;
+        END IF;
+
+        v_last_pass_total := COALESCE(v_remaining_small_holes, 0)
+            + COALESCE(v_remaining_small_intersections, 0)
             + COALESCE(v_reportable_overflows, 0);
 
-        EXIT WHEN v_last_pass_total = 0 OR v_pass >= 3;
+        EXIT WHEN v_last_pass_total = 0 OR v_pass >= 7;
     END LOOP;
 
-    IF v_last_pass_total > 0 AND v_pass >= 3 THEN
+    IF v_last_pass_total > 0 AND v_pass >= 7 THEN
         RAISE WARNING
             'OBM topology autofix reached pass limit for version %.',
             p_id_rel_geo_verzija;
