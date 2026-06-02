@@ -34,16 +34,18 @@ BEGIN
         RETURN NULL;
     END IF;
 
+    -- Collapse tiny slivers to the target grid and repair invalid debris.
     cleaned := ST_CollectionExtract(ST_MakeValid(ST_SnapToGrid(p_geom, gridsize)), 3);
 
     IF cleaned IS NULL OR ST_IsEmpty(cleaned) OR ST_Area(cleaned) = 0 THEN
         RETURN NULL;
     END IF;
 
-    cleaned := ST_CollectionExtract(
-        ST_MakeValid(ST_SnapToGrid(ST_UnaryUnion(cleaned), gridsize)),
-        3
-    );
+    -- Dissolve internal polygon boundaries before final fixed-precision cleanup.
+    cleaned := ST_UnaryUnion(cleaned);
+
+    -- Final operation must enforce precision. Do not call ST_MakeValid after this.
+    cleaned := ST_CollectionExtract(ST_ReducePrecision(cleaned, gridsize), 3);
 
     IF cleaned IS NULL OR ST_IsEmpty(cleaned) OR ST_Area(cleaned) = 0 THEN
         RETURN NULL;
