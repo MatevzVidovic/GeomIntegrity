@@ -117,7 +117,7 @@ BEGIN
         RAISE EXCEPTION 'Slovenia boundary (slo_meja) not found';
     END IF;
 
-    SELECT ST_Union(obm.geom)
+    SELECT ensure_snap_to_grid(ST_Union(ensure_snap_to_grid(obm.geom)))
     INTO v_union_geom
     FROM md_geo_obm obm
     WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
@@ -127,7 +127,8 @@ BEGIN
         RETURN;
     END IF;
 
-    v_holes_geom := ST_Difference(v_slo_meja, v_union_geom);
+    v_slo_meja := ensure_snap_to_grid(v_slo_meja);
+    v_holes_geom := ensure_snap_to_grid(ST_Difference(v_slo_meja, v_union_geom));
 
     IF v_holes_geom IS NULL OR ST_IsEmpty(v_holes_geom) THEN
         RETURN;
@@ -169,6 +170,8 @@ BEGIN
         RAISE EXCEPTION 'Slovenia boundary (slo_meja) not found';
     END IF;
 
+    v_slo_meja := ensure_snap_to_grid(v_slo_meja);
+
     RETURN QUERY
     SELECT
         overflow.obm_id,
@@ -179,8 +182,11 @@ BEGIN
     FROM (
         SELECT
             obm.id AS obm_id,
-            ensure_snap_to_grid((ST_Dump(ST_Difference(obm.geom, v_slo_meja))).geom) AS geom
+            ensure_snap_to_grid(dump_result.geom) AS geom
         FROM md_geo_obm obm
+        CROSS JOIN LATERAL ST_Dump(
+            ensure_snap_to_grid(ST_Difference(ensure_snap_to_grid(obm.geom), v_slo_meja))
+        ) AS dump_result
         WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
           AND obm.geom IS NOT NULL
           AND NOT ST_Covers(v_slo_meja, obm.geom)

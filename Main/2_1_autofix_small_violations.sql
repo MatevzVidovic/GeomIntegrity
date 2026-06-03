@@ -147,11 +147,12 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_hole_geom geometry;
-    v_best_neighbor_id uuid;
+    v_neighbor record;
     v_fixed_geom geometry;
     v_fixed_count integer := 0;
     v_row_count integer := 0;
     v_iteration integer := 0;
+    v_changed boolean := false;
 BEGIN
     LOOP
         v_iteration := v_iteration + 1;
@@ -166,44 +167,50 @@ BEGIN
 
         EXIT WHEN v_hole_geom IS NULL;
 
-        v_best_neighbor_id := find_best_obm_neighbor_for_hole(
-            p_id_rel_geo_verzija,
-            v_hole_geom,
-            NULL
-        );
+        v_changed := false;
 
-        IF v_best_neighbor_id IS NULL THEN
+        FOR v_neighbor IN
+            SELECT
+                obm.id,
+                ST_Area(ST_Intersection(ST_Buffer(v_hole_geom, 1), obm.geom)) AS shared_score
+            FROM md_geo_obm obm
+            WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
+              AND obm.geom IS NOT NULL
+              AND ST_Intersects(ST_Buffer(v_hole_geom, 10), obm.geom)
+            ORDER BY shared_score DESC, obm.id
+        LOOP
+            SELECT ensure_snap_to_grid(ST_Union(obm.geom, v_hole_geom))
+            INTO v_fixed_geom
+            FROM md_geo_obm obm
+            WHERE obm.id = v_neighbor.id;
+
+            IF v_fixed_geom IS NULL THEN
+                CONTINUE;
+            END IF;
+
+            UPDATE md_geo_obm
+            SET geom = ST_Multi(v_fixed_geom)::geometry(MultiPolygon, 3794)
+            WHERE id = v_neighbor.id
+              AND (
+                  NOT ST_Equals(geom, v_fixed_geom)
+                  OR ST_AsEWKB(geom) <> ST_AsEWKB(ST_Multi(v_fixed_geom)::geometry(MultiPolygon, 3794))
+              );
+
+            GET DIAGNOSTICS v_row_count = ROW_COUNT;
+
+            IF v_row_count > 0 THEN
+                v_changed := true;
+                EXIT;
+            END IF;
+        END LOOP;
+
+        IF NOT v_changed THEN
             RAISE WARNING
-                'Small OBM hole autofix found no neighbor for version %.',
-                p_id_rel_geo_verzija;
-            EXIT;
-        END IF;
-
-        SELECT ensure_snap_to_grid(ST_Union(obm.geom, v_hole_geom))
-        INTO v_fixed_geom
-        FROM md_geo_obm obm
-        WHERE obm.id = v_best_neighbor_id;
-
-        IF v_fixed_geom IS NULL THEN
-            RAISE WARNING
-                'Small OBM hole autofix produced empty geometry for version %, OBM %.',
+                'Small OBM hole autofix could not change any neighboring OBM for version %. Area %, perimeter %, compactness %.',
                 p_id_rel_geo_verzija,
-                v_best_neighbor_id;
-            EXIT;
-        END IF;
-
-        UPDATE md_geo_obm
-        SET geom = ST_Multi(v_fixed_geom)::geometry(MultiPolygon, 3794)
-        WHERE id = v_best_neighbor_id
-          AND NOT ST_Equals(geom, v_fixed_geom);
-
-        GET DIAGNOSTICS v_row_count = ROW_COUNT;
-
-        IF v_row_count = 0 THEN
-            RAISE WARNING
-                'Small OBM hole autofix made no geometry change for version %, OBM %.',
-                p_id_rel_geo_verzija,
-                v_best_neighbor_id;
+                ST_Area(v_hole_geom),
+                ST_Perimeter(v_hole_geom),
+                obm_topology_compactness(v_hole_geom);
             EXIT;
         END IF;
 
@@ -231,6 +238,7 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_target record;
+    v_target_id uuid;
     v_fixed_geom geometry;
     v_fixed_count integer := 0;
     v_iteration integer := 0;
@@ -258,9 +266,12 @@ BEGIN
         SELECT
             a.id,
             b.id,
-            ensure_snap_to_grid((ST_Dump(ST_Intersection(a.geom, b.geom))).geom)
+            ensure_snap_to_grid(dump_result.geom)
         FROM md_geo_obm a
         JOIN md_geo_obm b ON a.id_rel_geo_verzija = b.id_rel_geo_verzija
+        CROSS JOIN LATERAL ST_Dump(
+            ensure_snap_to_grid(ST_Intersection(a.geom, b.geom))
+        ) AS dump_result
         WHERE a.id_rel_geo_verzija = p_id_rel_geo_verzija
           AND a.id < b.id
           AND ST_Intersects(a.geom, b.geom)
@@ -277,30 +288,43 @@ BEGIN
 
         FOR v_target IN
             SELECT
+                id_a,
                 id_b,
-                ensure_snap_to_grid(ST_Union(intersection_geom)) AS geom_to_remove
+                intersection_geom AS geom_to_remove
             FROM temp_autofix_small_intersections
             WHERE ST_GeometryType(intersection_geom) IN ('ST_Polygon', 'ST_MultiPolygon')
               AND ST_Area(intersection_geom) > 0
               AND preprocessing_is_small_obm_topology_problem(intersection_geom)
-            GROUP BY id_b
+            ORDER BY ST_Area(intersection_geom) DESC, id_a, id_b
         LOOP
-            SELECT ensure_snap_to_grid(ST_Difference(obm.geom, v_target.geom_to_remove))
-            INTO v_fixed_geom
-            FROM md_geo_obm obm
-            WHERE obm.id = v_target.id_b;
+            FOR v_target_id IN
+                SELECT target_id
+                FROM (VALUES (v_target.id_b), (v_target.id_a)) AS targets(target_id)
+            LOOP
+                SELECT ensure_snap_to_grid(ST_Difference(obm.geom, v_target.geom_to_remove))
+                INTO v_fixed_geom
+                FROM md_geo_obm obm
+                WHERE obm.id = v_target_id;
 
-            IF v_fixed_geom IS NULL THEN
-                CONTINUE;
-            END IF;
+                IF v_fixed_geom IS NULL THEN
+                    CONTINUE;
+                END IF;
 
-            UPDATE md_geo_obm
-            SET geom = ST_Multi(v_fixed_geom)::geometry(MultiPolygon, 3794)
-            WHERE id = v_target.id_b
-              AND NOT ST_Equals(geom, v_fixed_geom);
+                UPDATE md_geo_obm
+                SET geom = ST_Multi(v_fixed_geom)::geometry(MultiPolygon, 3794)
+                WHERE id = v_target_id
+                  AND (
+                      NOT ST_Equals(geom, v_fixed_geom)
+                      OR ST_AsEWKB(geom) <> ST_AsEWKB(ST_Multi(v_fixed_geom)::geometry(MultiPolygon, 3794))
+                  );
 
-            GET DIAGNOSTICS v_row_count = ROW_COUNT;
-            v_iteration_changed := v_iteration_changed + v_row_count;
+                GET DIAGNOSTICS v_row_count = ROW_COUNT;
+                v_iteration_changed := v_iteration_changed + v_row_count;
+
+                EXIT WHEN v_row_count > 0;
+            END LOOP;
+
+            EXIT WHEN v_iteration_changed > 0;
         END LOOP;
 
         IF v_iteration_changed = 0 THEN
@@ -428,9 +452,12 @@ BEGIN
             WHERE preprocessing_is_small_obm_topology_problem(candidates.hole_geom);
 
             WITH small_intersections AS (
-                SELECT ensure_snap_to_grid((ST_Dump(ST_Intersection(a.geom, b.geom))).geom) AS geom
+                SELECT ensure_snap_to_grid(dump_result.geom) AS geom
                 FROM md_geo_obm a
                 JOIN md_geo_obm b ON a.id_rel_geo_verzija = b.id_rel_geo_verzija
+                CROSS JOIN LATERAL ST_Dump(
+                    ensure_snap_to_grid(ST_Intersection(a.geom, b.geom))
+                ) AS dump_result
                 WHERE a.id_rel_geo_verzija = p_id_rel_geo_verzija
                   AND a.id < b.id
                   AND ST_Intersects(a.geom, b.geom)

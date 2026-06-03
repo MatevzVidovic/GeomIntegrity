@@ -118,10 +118,13 @@ BEGIN
     SELECT
         a.id,
         b.id,
-        ensure_snap_to_grid((ST_Dump(ST_Intersection(a.geom, b.geom))).geom) as intersection_geom
+        ensure_snap_to_grid(dump_result.geom) as intersection_geom
 --         ST_Intersection(a.geom, b.geom) as intersection_geom
     FROM md_geo_obm a
     JOIN md_geo_obm b ON a.id_rel_geo_verzija = b.id_rel_geo_verzija
+    CROSS JOIN LATERAL ST_Dump(
+        ensure_snap_to_grid(ST_Intersection(a.geom, b.geom))
+    ) AS dump_result
     WHERE a.id_rel_geo_verzija = p_id_rel_geo_verzija
       AND a.id < b.id
       AND ST_Intersects(a.geom, b.geom)
