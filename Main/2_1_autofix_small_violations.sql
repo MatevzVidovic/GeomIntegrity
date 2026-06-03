@@ -397,6 +397,7 @@ DECLARE
     v_remaining_small_intersections integer := 0;
     v_pre_overflow_clipped_rows integer := 0;
     v_post_overflow_clipped_rows integer := 0;
+    v_no_progress boolean := false;
     v_trigger_existed boolean;
 BEGIN
     SELECT EXISTS (
@@ -477,6 +478,10 @@ BEGIN
         v_last_pass_total := COALESCE(v_remaining_small_holes, 0)
             + COALESCE(v_remaining_small_intersections, 0)
             + COALESCE(v_reportable_overflows, 0);
+        v_no_progress := COALESCE(v_pre_overflow_clipped_rows, 0) = 0
+            AND COALESCE(v_post_overflow_clipped_rows, 0) = 0
+            AND COALESCE(v_holes_fixed, 0) = 0
+            AND COALESCE(v_intersections_fixed, 0) = 0;
 
         RAISE NOTICE
             'OBM topology autofix pass %, version %, pre-clipped %, post-clipped %, fixed holes %, fixed intersections %, remaining reportable overflows %, remaining small holes %, remaining small intersections %.',
@@ -490,10 +495,17 @@ BEGIN
             v_remaining_small_holes,
             v_remaining_small_intersections;
 
-        EXIT WHEN v_last_pass_total = 0 OR v_pass >= 10;
+        EXIT WHEN v_last_pass_total = 0 OR v_no_progress OR v_pass >= 10;
     END LOOP;
 
-    IF v_last_pass_total > 0 AND v_pass >= 10 THEN
+    IF v_last_pass_total > 0 AND v_no_progress THEN
+        RAISE WARNING
+            'OBM topology autofix stopped for version % because the last pass made no geometry changes. Last pass left % reportable overflows, % small holes, % small intersections.',
+            p_id_rel_geo_verzija,
+            v_reportable_overflows,
+            v_remaining_small_holes,
+            v_remaining_small_intersections;
+    ELSIF v_last_pass_total > 0 AND v_pass >= 10 THEN
         RAISE WARNING
             'OBM topology autofix reached pass limit for version %. Last pass pre-clipped %, post-clipped %, left % reportable overflows, % small holes, % small intersections; fixed % holes and % intersections.',
             p_id_rel_geo_verzija,

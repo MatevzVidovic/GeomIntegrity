@@ -2,7 +2,7 @@
 
 sliver-creating_problems.md
 
-2 problems:
+3 problems:
 
 1st:
 https://claude.ai/share/cbb6b0b2-89ed-49ad-87cc-e8d6e0b663a3
@@ -13,8 +13,16 @@ ST_ReducePrecision wont let polygons become invalid.
 ST_SnapToGrid still has very small float errors in GEOSS 3.9
 Combine both so things actually work.
 
-
 2nd:
+
+No-op fixes are another problem:
+We tried autofixing intersection by removing the intersection geom from one of the 2 obmocja. For some reason, it was a no-op operation.
+And then when we added that if it is a no-op operation, we try removing it from the other obmocje, things suddenly worked correctly.
+Since everything is snapped to grid, we have no idea why one of these operations would be no-op. But hey, it works.
+This stuff happened for holes as well btw.
+
+
+3rd:
 Edge abutting and T-junction abutting:
 
 I am actually now thinking that this is not a problem in my case:
