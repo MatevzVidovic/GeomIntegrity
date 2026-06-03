@@ -189,11 +189,12 @@ BEGIN
 
         v_fixed_count := v_fixed_count + 1;
 
-        IF v_iteration >= 1000 THEN
-            RAISE WARNING
-                'Small OBM hole autofix reached iteration guard for version %.',
-                p_id_rel_geo_verzija;
-            EXIT;
+        -- Runaway safety guard only. Normal setup can legitimately fix many small holes.
+        IF v_iteration >= 10000 THEN
+            RAISE EXCEPTION
+                'Small OBM hole autofix reached iteration guard for version %. Fixed % holes in this call.',
+                p_id_rel_geo_verzija,
+                v_fixed_count;
         END IF;
     END LOOP;
 
@@ -292,11 +293,13 @@ BEGIN
 
         v_fixed_count := v_fixed_count + v_iteration_changed;
 
-        IF v_iteration >= 1000 THEN
-            RAISE WARNING
-                'Small OBM intersection autofix reached iteration guard for version %.',
-                p_id_rel_geo_verzija;
-            EXIT;
+        -- Runaway safety guard only. Normal setup can legitimately fix many small intersections.
+        IF v_iteration >= 10000 THEN
+            RAISE EXCEPTION
+                'Small OBM intersection autofix reached iteration guard for version %. Last candidate count %, fixed % rows in this call.',
+                p_id_rel_geo_verzija,
+                v_candidate_count,
+                v_fixed_count;
         END IF;
     END LOOP;
 
@@ -413,13 +416,28 @@ BEGIN
             + COALESCE(v_remaining_small_intersections, 0)
             + COALESCE(v_reportable_overflows, 0);
 
-        EXIT WHEN v_last_pass_total = 0 OR v_pass >= 7;
+        RAISE NOTICE
+            'OBM topology autofix pass %, version %, fixed holes %, fixed intersections %, remaining reportable overflows %, remaining small holes %, remaining small intersections %.',
+            v_pass,
+            p_id_rel_geo_verzija,
+            v_holes_fixed,
+            v_intersections_fixed,
+            v_reportable_overflows,
+            v_remaining_small_holes,
+            v_remaining_small_intersections;
+
+        EXIT WHEN v_last_pass_total = 0 OR v_pass >= 10;
     END LOOP;
 
-    IF v_last_pass_total > 0 AND v_pass >= 7 THEN
+    IF v_last_pass_total > 0 AND v_pass >= 10 THEN
         RAISE WARNING
-            'OBM topology autofix reached pass limit for version %.',
-            p_id_rel_geo_verzija;
+            'OBM topology autofix reached pass limit for version %. Last pass left % reportable overflows, % small holes, % small intersections; last pass fixed % holes and % intersections.',
+            p_id_rel_geo_verzija,
+            v_reportable_overflows,
+            v_remaining_small_holes,
+            v_remaining_small_intersections,
+            v_holes_fixed,
+            v_intersections_fixed;
     END IF;
 
     RAISE NOTICE
