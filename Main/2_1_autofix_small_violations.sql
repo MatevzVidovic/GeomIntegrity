@@ -24,21 +24,24 @@ DROP FUNCTION IF EXISTS autofix_small_intersections_for_version(uuid);
 DROP FUNCTION IF EXISTS autofix_small_holes_for_version(uuid);
 DROP FUNCTION IF EXISTS autofix_overflows_all_versions();
 DROP FUNCTION IF EXISTS autofix_overflows_for_version(uuid);
+DROP FUNCTION IF EXISTS autofix_overflows_for_version_with_stats(uuid);
 
 -- ########################################
 -- Autofixing everything at once - for after validate_all_topologies:
 -- ########################################
 
 -- Clips OBMs to slo_meja for one OBM version.
--- Returns how many reportable overflows remain after clipping.
+-- Returns how many OBM rows were changed and how many reportable overflows remain.
 -- Does not fix holes or intersections.
-CREATE OR REPLACE FUNCTION autofix_overflows_for_version(p_id_rel_geo_verzija uuid)
-RETURNS integer
+CREATE OR REPLACE FUNCTION autofix_overflows_for_version_with_stats(p_id_rel_geo_verzija uuid)
+RETURNS TABLE(
+    clipped_rows integer,
+    reportable_overflows integer
+)
 LANGUAGE plpgsql
 AS $$
 DECLARE
     v_slo_meja geometry;
-    v_remaining_count integer := 0;
 BEGIN
     SELECT geom INTO v_slo_meja FROM slo_meja LIMIT 1;
 
@@ -65,12 +68,29 @@ BEGIN
       AND NOT ST_IsEmpty(clipped.geom)
       AND NOT ST_Equals(obm.geom, clipped.geom);
 
+    GET DIAGNOSTICS clipped_rows = ROW_COUNT;
+
     SELECT COUNT(*)
-    INTO v_remaining_count
+    INTO reportable_overflows
     FROM get_obm_overflow_candidates(p_id_rel_geo_verzija) candidates
     WHERE NOT preprocessing_is_small_obm_topology_problem(candidates.overflow_geom);
 
-    RETURN v_remaining_count;
+    RETURN NEXT;
+END $$;
+
+-- Compatibility wrapper for callers that only need remaining reportable overflows.
+CREATE OR REPLACE FUNCTION autofix_overflows_for_version(p_id_rel_geo_verzija uuid)
+RETURNS integer
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_reportable_overflows integer := 0;
+BEGIN
+    SELECT stats.reportable_overflows
+    INTO v_reportable_overflows
+    FROM autofix_overflows_for_version_with_stats(p_id_rel_geo_verzija) stats;
+
+    RETURN v_reportable_overflows;
 END $$;
 
 -- Manual/debug helper for clipping overflows in all OBM versions.
@@ -351,6 +371,8 @@ DECLARE
     v_total_intersections_fixed integer := 0;
     v_remaining_small_holes integer := 0;
     v_remaining_small_intersections integer := 0;
+    v_pre_overflow_clipped_rows integer := 0;
+    v_post_overflow_clipped_rows integer := 0;
     v_trigger_existed boolean;
 BEGIN
     SELECT EXISTS (
@@ -367,7 +389,13 @@ BEGIN
     LOOP
         v_pass := v_pass + 1;
 
-        PERFORM autofix_overflows_for_version(p_id_rel_geo_verzija);
+        SELECT
+            stats.clipped_rows,
+            stats.reportable_overflows
+        INTO
+            v_pre_overflow_clipped_rows,
+            v_reportable_overflows
+        FROM autofix_overflows_for_version_with_stats(p_id_rel_geo_verzija) stats;
 
         IF obm_small_topology_autofix_enabled() THEN
             SELECT
@@ -382,7 +410,14 @@ BEGIN
             v_intersections_fixed := 0;
         END IF;
 
-        v_reportable_overflows := autofix_overflows_for_version(p_id_rel_geo_verzija);
+        SELECT
+            stats.clipped_rows,
+            stats.reportable_overflows
+        INTO
+            v_post_overflow_clipped_rows,
+            v_reportable_overflows
+        FROM autofix_overflows_for_version_with_stats(p_id_rel_geo_verzija) stats;
+
         v_total_holes_fixed := v_total_holes_fixed + COALESCE(v_holes_fixed, 0);
         v_total_intersections_fixed := v_total_intersections_fixed + COALESCE(v_intersections_fixed, 0);
 
@@ -417,9 +452,11 @@ BEGIN
             + COALESCE(v_reportable_overflows, 0);
 
         RAISE NOTICE
-            'OBM topology autofix pass %, version %, fixed holes %, fixed intersections %, remaining reportable overflows %, remaining small holes %, remaining small intersections %.',
+            'OBM topology autofix pass %, version %, pre-clipped %, post-clipped %, fixed holes %, fixed intersections %, remaining reportable overflows %, remaining small holes %, remaining small intersections %.',
             v_pass,
             p_id_rel_geo_verzija,
+            v_pre_overflow_clipped_rows,
+            v_post_overflow_clipped_rows,
             v_holes_fixed,
             v_intersections_fixed,
             v_reportable_overflows,
@@ -431,8 +468,10 @@ BEGIN
 
     IF v_last_pass_total > 0 AND v_pass >= 10 THEN
         RAISE WARNING
-            'OBM topology autofix reached pass limit for version %. Last pass left % reportable overflows, % small holes, % small intersections; last pass fixed % holes and % intersections.',
+            'OBM topology autofix reached pass limit for version %. Last pass pre-clipped %, post-clipped %, left % reportable overflows, % small holes, % small intersections; fixed % holes and % intersections.',
             p_id_rel_geo_verzija,
+            v_pre_overflow_clipped_rows,
+            v_post_overflow_clipped_rows,
             v_reportable_overflows,
             v_remaining_small_holes,
             v_remaining_small_intersections,
@@ -441,9 +480,11 @@ BEGIN
     END IF;
 
     RAISE NOTICE
-        'Version % took % passes. Last pass left % reportable overflows and fixed % holes and % intersections.',
+        'Version % took % passes. Last pass pre-clipped %, post-clipped %, left % reportable overflows and fixed % holes and % intersections.',
         p_id_rel_geo_verzija,
         v_pass,
+        v_pre_overflow_clipped_rows,
+        v_post_overflow_clipped_rows,
         v_reportable_overflows,
         v_holes_fixed,
         v_intersections_fixed;
