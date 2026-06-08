@@ -29,5 +29,12 @@
       <jdbc-url>jdbc:postgresql://db.lift-t.gurs.sigov.si:5432/postgres</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
+    <data-source source="LOCAL" name="ISAM - njihov test Readonly" uuid="b8304e07-d2c3-471f-81ba-deaf22a0a9ab">
+      <driver-ref>postgresql</driver-ref>
+      <synchronize>true</synchronize>
+      <jdbc-driver>org.postgresql.Driver</jdbc-driver>
+      <jdbc-url>jdbc:postgresql://db.lift-t.gurs.sigov.si:5432/postgres</jdbc-url>
+      <working-dir>$ProjectFileDir$</working-dir>
+    </data-source>
   </component>
 </project>
