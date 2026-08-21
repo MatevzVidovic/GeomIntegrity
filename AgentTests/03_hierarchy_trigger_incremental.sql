@@ -105,7 +105,7 @@ VALUES
 
 \echo 'Case: cona/LAO/TAO geometries snap on INSERT and UPDATE'
 SELECT pg_temp.assert_true(
-    (SELECT bool_and(ST_Equals(geom, ST_GeomFromText('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))', 3794)))
+    (SELECT bool_and(ST_Equals(geom, ST_GeomFromText('POLYGON((0.04 0.04, 1.04 0.04, 1.04 1.04, 0.04 1.04, 0.04 0.04))', 3794)))
      FROM (
          SELECT geom FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona1')
          UNION ALL
@@ -113,7 +113,7 @@ SELECT pg_temp.assert_true(
          UNION ALL
          SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')
      ) inserted_geometries),
-    'INSERT should snap cona, LAO, and TAO geometries to the 0.1 grid'
+    'INSERT should preserve cona, LAO, and TAO geometries already on the 0.01 grid'
 );
 
 UPDATE md_geo_cona SET geom = ST_GeomFromText('POLYGON((2.04 2.04, 3.04 2.04, 3.04 3.04, 2.04 3.04, 2.04 2.04))', 3794)
@@ -124,7 +124,7 @@ UPDATE md_geo_tao SET geom = ST_GeomFromText('POLYGON((2.04 2.04, 3.04 2.04, 3.0
 WHERE id = (SELECT value FROM agent_ids WHERE key='tao1');
 
 SELECT pg_temp.assert_true(
-    (SELECT bool_and(ST_Equals(geom, ST_GeomFromText('POLYGON((2 2, 3 2, 3 3, 2 3, 2 2))', 3794)))
+    (SELECT bool_and(ST_Equals(geom, ST_GeomFromText('POLYGON((2.04 2.04, 3.04 2.04, 3.04 3.04, 2.04 3.04, 2.04 2.04))', 3794)))
      FROM (
          SELECT geom FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona1')
          UNION ALL
@@ -132,7 +132,7 @@ SELECT pg_temp.assert_true(
          UNION ALL
          SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')
      ) updated_geometries),
-    'UPDATE should snap cona, LAO, and TAO geometries to the 0.1 grid'
+    'UPDATE should preserve cona, LAO, and TAO geometries already on the 0.01 grid'
 );
 
 INSERT INTO md_geo_obmxcona (id, created_at, created_by, id_rel_geo_obm, id_rel_geo_cona)

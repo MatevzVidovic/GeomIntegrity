@@ -21,12 +21,16 @@ DECLARE
     v_slo_meja geometry;
     v_hole_geom geometry;
     v_single_hole_geom geometry;
+    v_component_geom geometry;
+    v_component_overlap_geom geometry;
+    v_component_piece_geom geometry;
     v_possible_new_geom geometry;
     v_insertion_geom geometry;
     v_insertion_hole_union_geom geometry;
     v_small_intersections_geom geometry;
     v_id_rel_geo_verzija UUID;
     v_best_neighbor_id UUID;
+    v_updated_rows integer;
 BEGIN
     IF current_setting('geom_integrity.skip_obm_topology_trigger', true) = 'on' THEN
         IF TG_OP = 'DELETE' THEN
@@ -165,11 +169,32 @@ BEGIN
                     CONTINUE;
                 END IF;
 
-                -- here we do not do: autofix small - holes
-                -- because we are deleting a geom and would therefore need to append the geom to some other obm
-                -- which could potentially trigger an infinite sequence of calls.
-                -- It is also not necessary, because if this is a DELETE, it will all be one big hole anyways,
-                -- and if this is an update, the small holes will get joined later anyways. 
+                IF TG_OP = 'UPDATE'
+                   AND obm_small_topology_autofix_enabled()
+                   AND is_small_obm_topology_problem(v_single_hole_geom) THEN
+                    v_best_neighbor_id := find_best_obm_neighbor_for_hole(
+                        v_id_rel_geo_verzija,
+                        v_single_hole_geom,
+                        OLD.id
+                    );
+
+                    IF v_best_neighbor_id IS NOT NULL THEN
+                        PERFORM set_config('geom_integrity.skip_obm_topology_trigger', 'on', true);
+
+                        UPDATE md_geo_obm
+                        SET geom = ST_Multi(ensure_snap_to_grid(
+                            ST_Union(geom, v_single_hole_geom)
+                        ))::geometry(MultiPolygon, 3794)
+                        WHERE id = v_best_neighbor_id;
+
+                        GET DIAGNOSTICS v_updated_rows = ROW_COUNT;
+                        PERFORM set_config('geom_integrity.skip_obm_topology_trigger', 'off', true);
+
+                        IF v_updated_rows = 1 THEN
+                            CONTINUE;
+                        END IF;
+                    END IF;
+                END IF;
 
                 INSERT INTO md_topoloske_kontrole_obm (
                     id,
@@ -244,61 +269,7 @@ BEGIN
            AND v_small_intersections_geom IS NOT NULL
            AND NOT ST_IsEmpty(v_small_intersections_geom) THEN
             v_insertion_geom := ensure_snap_to_grid(ST_Difference(v_insertion_geom, v_small_intersections_geom));
-
-            DROP TABLE IF EXISTS new_intersections;
-            CREATE TEMP TABLE new_intersections ON COMMIT DROP AS (
-                SELECT
-                    id as other_id,
-                    ensure_snap_to_grid((ST_Dump(st_intersection(geom, v_insertion_geom))).geom) as intersection_geom
-                FROM md_geo_obm
-                WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
-                  AND id != NEW.id
-                  AND ST_Intersects(geom, v_insertion_geom)
-                  AND NOT ST_Touches(geom, v_insertion_geom)
-            );
         END IF;
-
-        INSERT INTO md_topoloske_kontrole_obm (
-            id,
-            created_at,
-            created_by,
-            geom,
-            id_rel_geo_verzija,
-            id1,
-            id2,
-            povrsina,
-            obseg,
-            kompaktnost,
-            tip_topoloskega_problema
-        )
-        SELECT
-            uuid_generate_v4(),
-            now()::timestamp,
-            '00000000-0000-0000-0000-000000000000'::uuid,
-            geom,
-            v_id_rel_geo_verzija,
-            LEAST(NEW.id, other_id),
-            GREATEST(NEW.ID, other_id),
-            povrsina,
-            obseg,
-            4*pi()*povrsina / NULLIF(obseg * obseg, 0),   -- (circle has it 0.08 (1/4*pi) and is most compact. Everything else is less compact.)
-            'prekrivanje'
-        FROM (
-            SELECT
-                other_id,
-                n.intersection_geom AS geom,
-                ST_Perimeter(intersection_geom) as obseg,
-                ST_Area(intersection_geom) as povrsina
-            FROM new_intersections as n
---             WHERE  ST_GeometryType(intersection_geom) not in ('ST_LineString')
-            WHERE  ST_GeometryType(intersection_geom) in ('ST_Polygon', 'ST_MultiPolygon')
-            ) AS calculated
-            WHERE povrsina > 0
-              AND (
-                  NOT obm_small_topology_autofix_enabled()
-                  OR NOT is_small_obm_topology_problem(geom)
-              );
-
 
         -- With holes, we take all holes that intersect our insertion geom, we union them into a var,
         -- we delete them from md_topoloske_kontrole_obm, we remove the inserting geom from the union
@@ -362,6 +333,130 @@ BEGIN
             END LOOP;
         END IF;
 
+        -- Keep the main inserted area, but return tiny detached pieces to a
+        -- neighbor when they share an edge.
+        IF obm_small_topology_autofix_enabled() THEN
+            FOR v_component_geom IN
+                SELECT component
+                FROM (
+                    SELECT (ST_Dump(v_insertion_geom)).geom AS component
+                ) components
+                ORDER BY ST_Area(component) DESC, ST_AsEWKB(component)
+                OFFSET 1
+            LOOP
+                IF NOT is_small_obm_topology_problem(v_component_geom) THEN
+                    CONTINUE;
+                END IF;
+
+                SELECT ensure_snap_to_grid(ST_Union(
+                    ST_Intersection(geom, v_component_geom)
+                ))
+                INTO v_component_overlap_geom
+                FROM md_geo_obm
+                WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
+                  AND id <> NEW.id
+                  AND ST_Intersects(geom, v_component_geom)
+                  AND ST_Area(ST_Intersection(geom, v_component_geom)) > 0;
+
+                IF v_component_overlap_geom IS NOT NULL THEN
+                    v_insertion_geom := ensure_snap_to_grid(
+                        ST_Difference(v_insertion_geom, v_component_overlap_geom)
+                    );
+                    v_component_geom := ensure_snap_to_grid(
+                        ST_Difference(v_component_geom, v_component_overlap_geom)
+                    );
+                END IF;
+
+                IF v_component_geom IS NULL OR ST_IsEmpty(v_component_geom) THEN
+                    CONTINUE;
+                END IF;
+
+                FOR v_component_piece_geom IN
+                    SELECT (ST_Dump(v_component_geom)).geom
+                LOOP
+                    v_best_neighbor_id := find_best_obm_neighbor_for_hole(
+                        v_id_rel_geo_verzija,
+                        v_component_piece_geom,
+                        NEW.id
+                    );
+
+                    IF v_best_neighbor_id IS NULL THEN
+                        CONTINUE;
+                    END IF;
+
+                    PERFORM set_config('geom_integrity.skip_obm_topology_trigger', 'on', true);
+
+                    UPDATE md_geo_obm
+                    SET geom = ST_Multi(ensure_snap_to_grid(
+                        ST_Union(geom, v_component_piece_geom)
+                    ))::geometry(MultiPolygon, 3794)
+                    WHERE id = v_best_neighbor_id;
+
+                    GET DIAGNOSTICS v_updated_rows = ROW_COUNT;
+                    PERFORM set_config('geom_integrity.skip_obm_topology_trigger', 'off', true);
+
+                    IF v_updated_rows = 1 THEN
+                        v_insertion_geom := ensure_snap_to_grid(
+                            ST_Difference(v_insertion_geom, v_component_piece_geom)
+                        );
+                    END IF;
+                END LOOP;
+            END LOOP;
+        END IF;
+
+        -- Report intersections only after all corrections to NEW.geom.
+        DROP TABLE IF EXISTS new_intersections;
+        CREATE TEMP TABLE new_intersections ON COMMIT DROP AS (
+            SELECT
+                id AS other_id,
+                ensure_snap_to_grid((ST_Dump(ST_Intersection(geom, v_insertion_geom))).geom) AS intersection_geom
+            FROM md_geo_obm
+            WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
+              AND id <> NEW.id
+              AND ST_Intersects(geom, v_insertion_geom)
+              AND NOT ST_Touches(geom, v_insertion_geom)
+        );
+
+        INSERT INTO md_topoloske_kontrole_obm (
+            id,
+            created_at,
+            created_by,
+            geom,
+            id_rel_geo_verzija,
+            id1,
+            id2,
+            povrsina,
+            obseg,
+            kompaktnost,
+            tip_topoloskega_problema
+        )
+        SELECT
+            uuid_generate_v4(),
+            now()::timestamp,
+            '00000000-0000-0000-0000-000000000000'::uuid,
+            geom,
+            v_id_rel_geo_verzija,
+            LEAST(NEW.id, other_id),
+            GREATEST(NEW.id, other_id),
+            povrsina,
+            obseg,
+            obm_topology_compactness(geom),
+            'prekrivanje'
+        FROM (
+            SELECT
+                other_id,
+                intersection_geom AS geom,
+                ST_Perimeter(intersection_geom) AS obseg,
+                ST_Area(intersection_geom) AS povrsina
+            FROM new_intersections
+            WHERE ST_GeometryType(intersection_geom) IN ('ST_Polygon', 'ST_MultiPolygon')
+        ) calculated
+        WHERE povrsina > 0
+          AND (
+              NOT obm_small_topology_autofix_enabled()
+              OR NOT is_small_obm_topology_problem(geom)
+          );
+
         -- make sure the geom we are inserting is what we actually snapped here (important for cutting overflows as we did at the start)
         NEW.geom := ST_Multi(v_insertion_geom)::geometry(MultiPolygon, 3794);
 
@@ -383,15 +478,6 @@ CREATE TRIGGER trg_validate_topology_incremental
     BEFORE INSERT OR UPDATE OF geom, id_rel_geo_verzija OR DELETE ON md_geo_obm
     FOR EACH ROW
     EXECUTE FUNCTION validate_topology_incremental();
-
-
-
-
-
-
-
-
-
 
 
 

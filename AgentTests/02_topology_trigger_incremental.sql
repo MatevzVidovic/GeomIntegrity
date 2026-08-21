@@ -24,6 +24,13 @@ BEGIN
 END;
 $$;
 
+SELECT pg_temp.assert_true(
+    abs(ST_Area(ensure_snap_to_grid(
+        ST_GeomFromText('POLYGON((0 0, 0.01 0, 0.01 1, 0 1, 0 0))', 3794)
+    )) - 0.01) < 1e-9,
+    'The default precision should preserve geometry on the 0.01 grid'
+);
+
 CREATE TEMP TABLE agent_ids (
     key text PRIMARY KEY,
     value uuid NOT NULL
@@ -51,6 +58,15 @@ VALUES
     ('delayed_version', uuid_generate_v4()),
     ('delayed_parent', uuid_generate_v4()),
     ('delayed_child', uuid_generate_v4()),
+    ('active_split_version', uuid_generate_v4()),
+    ('active_split_parent', uuid_generate_v4()),
+    ('active_split_child', uuid_generate_v4()),
+    ('components_version', uuid_generate_v4()),
+    ('components_neighbor', uuid_generate_v4()),
+    ('components_overlap', uuid_generate_v4()),
+    ('components_transfer', uuid_generate_v4()),
+    ('components_unmatched', uuid_generate_v4()),
+    ('components_non_small', uuid_generate_v4()),
     ('live_wide_intersection_version', uuid_generate_v4()),
     ('live_wide_intersection_a', uuid_generate_v4()),
     ('live_wide_intersection_b', uuid_generate_v4());
@@ -472,6 +488,71 @@ SELECT pg_temp.assert_true(
     'Delete-created small hole should not mutate another OBM from the row trigger'
 );
 
+\echo 'Case: updating an original after its split child is active fixes the residual hole'
+INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='active_split_version'),
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    now()::timestamp,
+    99112,
+    false,
+    'AGENT_TEST_ACTIVE_SPLIT',
+    false
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='active_split_parent'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='active_split_version'),
+    'T_ACTIVE_SPLIT_PARENT',
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))', 3794)
+);
+
+-- This matches the observed split order: the child participates in topology
+-- before the original geometry is reduced.
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='active_split_child'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='active_split_version'),
+    'T_ACTIVE_SPLIT_CHILD',
+    ST_GeomFromText('POLYGON((5 0, 10 0, 10 10, 5 10, 5 0))', 3794)
+);
+
+UPDATE md_geo_obm
+SET geom = ST_GeomFromText('POLYGON((0 0, 4.99 0, 4.99 10, 0 10, 0 0))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='active_split_parent');
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*)
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='active_split_version')
+    ) = 0,
+    'The residual split hole should be fixed without leaving a topology control'
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT abs(ST_Area(geom) - 49.9) < 1e-6
+        FROM md_geo_obm
+        WHERE id = (SELECT value FROM agent_ids WHERE key='active_split_parent')
+    ),
+    'Fixing the residual split hole should preserve the updated original geometry'
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT abs(ST_Area(ST_Union(geom)) - 100) < 1e-6
+        FROM md_geo_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='active_split_version')
+    ),
+    'The split parent and child should retain complete coverage'
+);
+
 \echo 'Case: assigning a delayed version processes existing geometry as an addition'
 INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
 VALUES (
@@ -561,6 +642,137 @@ SELECT pg_temp.assert_true(
         WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='delayed_version')
     ),
     'Delayed version assignment should preserve complete parent and child coverage'
+);
+
+\echo 'Case: final secondary components are cleaned up locally'
+TRUNCATE TABLE slo_meja;
+INSERT INTO slo_meja (id, created_at, created_by, geom)
+VALUES (
+    uuid_generate_v4(),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    ST_GeomFromText('POLYGON((0 0, 200 0, 200 20, 0 20, 0 0))', 3794)
+);
+
+INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='components_version'),
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    now()::timestamp,
+    99113,
+    false,
+    'AGENT_TEST_COMPONENTS',
+    false
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='components_neighbor'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='components_version'),
+    'T_COMPONENTS_NEIGHBOR',
+    ST_GeomFromText('POLYGON((0 0, 20 0, 20 1, 10 1, 10 10, 0 10, 0 0))', 3794)
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='components_overlap'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='components_version'),
+    'T_COMPONENTS_OVERLAP',
+    ST_GeomFromText('POLYGON((20 1, 24 1, 24 5, 20 5, 20 1))', 3794)
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='components_transfer'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='components_version'),
+    'T_COMPONENTS_TRANSFER',
+    ST_GeomFromText('MULTIPOLYGON(((100 0, 120 0, 120 10, 100 10, 100 0)),((10 1, 60 1, 60 2, 24 2, 24 5, 20 5, 20 3, 10 3, 10 1)))', 3794)
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT abs(ST_Area(geom) - 200) < 1e-6 AND ST_NumGeometries(geom) = 1
+        FROM md_geo_obm
+        WHERE id = (SELECT value FROM agent_ids WHERE key='components_transfer')
+    ) AND (
+        SELECT abs(ST_Area(geom) - 130) < 1e-6 AND ST_NumGeometries(geom) = 1
+        FROM md_geo_obm
+        WHERE id = (SELECT value FROM agent_ids WHERE key='components_neighbor')
+    ) AND (
+        SELECT abs(ST_Area(geom) - 52) < 1e-6 AND ST_NumGeometries(geom) = 1
+        FROM md_geo_obm
+        WHERE id = (SELECT value FROM agent_ids WHERE key='components_overlap')
+    ),
+    'Each uncovered piece should transfer independently to its adjacent recipient'
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT abs(ST_Area(ST_Union(geom)) - 382) < 1e-6
+        FROM md_geo_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='components_version')
+    ) AND NOT EXISTS (
+        SELECT 1
+        FROM md_geo_obm a
+        JOIN md_geo_obm b ON a.id < b.id
+        WHERE a.id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='components_version')
+          AND b.id_rel_geo_verzija = a.id_rel_geo_verzija
+          AND ST_Area(ST_Intersection(a.geom, b.geom)) > 0
+    ) AND NOT EXISTS (
+        SELECT 1
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='components_version')
+          AND tip_topoloskega_problema = 'prekrivanje'
+          AND (
+              id1 = (SELECT value FROM agent_ids WHERE key='components_transfer')
+              OR id2 = (SELECT value FROM agent_ids WHERE key='components_transfer')
+          )
+    ),
+    'Component transfer should preserve coverage without overlaps or stale source controls'
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='components_unmatched'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='components_version'),
+    'T_COMPONENTS_UNMATCHED',
+    ST_GeomFromText('MULTIPOLYGON(((120 10, 130 10, 130 20, 120 20, 120 10)),((140 0, 140.01 0, 140.01 10, 140 10, 140 0)))', 3794)
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT abs(ST_Area(geom) - 100.1) < 1e-6 AND ST_NumGeometries(geom) = 2
+        FROM md_geo_obm
+        WHERE id = (SELECT value FROM agent_ids WHERE key='components_unmatched')
+    ),
+    'A tiny secondary component without a touching neighbor should remain'
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='components_non_small'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='components_version'),
+    'T_COMPONENTS_NON_SMALL',
+    ST_GeomFromText('MULTIPOLYGON(((150 0, 170 0, 170 10, 150 10, 150 0)),((180 0, 190 0, 190 1, 180 1, 180 0)))', 3794)
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT abs(ST_Area(geom) - 210) < 1e-6 AND ST_NumGeometries(geom) = 2
+        FROM md_geo_obm
+        WHERE id = (SELECT value FROM agent_ids WHERE key='components_non_small')
+    ),
+    'A non-small secondary component should remain'
 );
 
 \echo 'Case: live trigger keeps stricter small-topology threshold than preprocessing'

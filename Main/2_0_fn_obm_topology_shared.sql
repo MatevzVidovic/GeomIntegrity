@@ -92,15 +92,22 @@ RETURNS uuid
 LANGUAGE sql
 STABLE
 AS $$
-    SELECT obm.id
-    FROM md_geo_obm obm
-    WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
-      AND obm.geom IS NOT NULL
-      AND (p_excluded_obm_id IS NULL OR obm.id <> p_excluded_obm_id)
-      AND ST_Intersects(ST_Buffer(p_hole_geom, 10), obm.geom)
-    ORDER BY
-      ST_Area(ST_Intersection(ST_Buffer(p_hole_geom, 1), obm.geom)) DESC,
-      obm.id
+    SELECT id
+    FROM (
+        SELECT
+            obm.id,
+            ST_Length(ST_Intersection(
+                ST_Boundary(obm.geom),
+                ST_Boundary(p_hole_geom)
+            )) AS shared_boundary
+        FROM md_geo_obm obm
+        WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
+          AND obm.geom IS NOT NULL
+          AND (p_excluded_obm_id IS NULL OR obm.id <> p_excluded_obm_id)
+          AND ST_Touches(obm.geom, p_hole_geom)
+    ) candidates
+    WHERE shared_boundary > 0
+    ORDER BY shared_boundary DESC, id
     LIMIT 1;
 $$;
 

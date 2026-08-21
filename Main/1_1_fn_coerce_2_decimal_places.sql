@@ -9,7 +9,7 @@ DROP FUNCTION IF EXISTS ensure_snap_to_grid(geometry, float8);
 
 CREATE OR REPLACE FUNCTION ensure_snap_to_grid(
     p_geom geometry,
-    gridsize float8 DEFAULT 0.1
+    gridsize float8 DEFAULT 0.01
 )
 RETURNS geometry
 LANGUAGE plpgsql
@@ -85,7 +85,7 @@ BEGIN
         WHERE geom IS NOT NULL
     LOOP
         IF NOT geom_is_on_2_decimal_grid(rec.geom) THEN
-            RAISE NOTICE 'Geometry is not on 0.1 grid: %.%', rec.source_table, rec.row_id;
+            RAISE NOTICE 'Geometry is not on 0.01 grid: %.%', rec.source_table, rec.row_id;
             RETURN FALSE;
         END IF;
     END LOOP;
@@ -138,7 +138,7 @@ BEGIN
         WHERE geom IS NOT NULL
           AND ensure_snap_to_grid(geom) IS NULL
     ) THEN
-        RAISE EXCEPTION 'Snapping slo_meja to 0.1 grid collapsed a boundary geometry';
+        RAISE EXCEPTION 'Snapping slo_meja to 0.01 grid collapsed a boundary geometry';
     END IF;
 
     IF EXISTS (
@@ -147,11 +147,11 @@ BEGIN
         WHERE geom IS NOT NULL
           AND ensure_snap_to_grid(geom) IS NULL
     ) THEN
-        RAISE EXCEPTION 'Snapping md_geo_obm to 0.1 grid collapsed an OBM geometry';
+        RAISE EXCEPTION 'Snapping md_geo_obm to 0.01 grid collapsed an OBM geometry';
     END IF;
 
     -- slo_meja is the canonical clipping/check boundary. Snap it first so all
-    -- following OBM topology operations use a 0.1-grid boundary.
+    -- following OBM topology operations use a 0.01-grid boundary.
     UPDATE slo_meja
     SET geom = ST_Multi(ensure_snap_to_grid(geom))::geometry(MultiPolygon, 3794);
 
@@ -177,7 +177,7 @@ BEGIN
         v_snapped_geom := ensure_snap_to_grid(NEW.geom);
 
         IF v_snapped_geom IS NULL THEN
-            RAISE EXCEPTION 'Snapping md_geo_obm geometry to 0.1 grid collapsed it';
+            RAISE EXCEPTION 'Snapping md_geo_obm geometry to 0.01 grid collapsed it';
         END IF;
 
         NEW.geom := ST_Multi(v_snapped_geom)::geometry(MultiPolygon, 3794);
