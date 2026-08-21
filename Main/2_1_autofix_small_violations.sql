@@ -131,7 +131,7 @@ BEGIN
     IF v_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_topology_incremental') THEN
         EXECUTE '
             CREATE TRIGGER trg_validate_topology_incremental
-            BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
+            BEFORE INSERT OR UPDATE OF geom, id_rel_geo_verzija OR DELETE ON md_geo_obm
             FOR EACH ROW
             EXECUTE FUNCTION validate_topology_incremental()';
     END IF;
@@ -531,7 +531,7 @@ BEGIN
     IF v_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_topology_incremental') THEN
         EXECUTE '
             CREATE TRIGGER trg_validate_topology_incremental
-            BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
+            BEFORE INSERT OR UPDATE OF geom, id_rel_geo_verzija OR DELETE ON md_geo_obm
             FOR EACH ROW
             EXECUTE FUNCTION validate_topology_incremental()';
     END IF;
@@ -587,7 +587,7 @@ BEGIN
     IF v_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_topology_incremental') THEN
         EXECUTE '
             CREATE TRIGGER trg_validate_topology_incremental
-            BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
+            BEFORE INSERT OR UPDATE OF geom, id_rel_geo_verzija OR DELETE ON md_geo_obm
             FOR EACH ROW
             EXECUTE FUNCTION validate_topology_incremental()';
     END IF;
@@ -638,7 +638,7 @@ BEGIN
     IF v_trigger_existed AND EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_topology_incremental') THEN
         EXECUTE '
             CREATE TRIGGER trg_validate_topology_incremental
-            BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
+            BEFORE INSERT OR UPDATE OF geom, id_rel_geo_verzija OR DELETE ON md_geo_obm
             FOR EACH ROW
             EXECUTE FUNCTION validate_topology_incremental()';
     END IF;

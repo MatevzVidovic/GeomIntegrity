@@ -36,6 +36,14 @@ BEGIN
         RETURN NEW;
     END IF;
 
+    -- UPDATE OF fires when a column is named in SET, even if its value does not
+    -- actually change. Avoid rebuilding topology controls for such no-op updates.
+    IF TG_OP = 'UPDATE'
+       AND NEW.geom IS NOT DISTINCT FROM OLD.geom
+       AND NEW.id_rel_geo_verzija IS NOT DISTINCT FROM OLD.id_rel_geo_verzija THEN
+        RETURN NEW;
+    END IF;
+
     -- to prevent bogus holes we do this at the start of insert/update part
     -- v_insertion_geom := ensure_snap_to_grid(NEW.geom);
     -- and at the end of that part we do:
@@ -71,7 +79,8 @@ BEGIN
     -- ========================================================================
     -- PHASE 1: HANDLE REMOVAL (DELETE or UPDATE)
     -- ========================================================================
-    IF (TG_OP = 'DELETE' OR TG_OP = 'UPDATE') THEN
+    IF (TG_OP = 'DELETE' OR TG_OP = 'UPDATE')
+       AND OLD.id_rel_geo_verzija IS NOT NULL THEN
         v_id_rel_geo_verzija := OLD.id_rel_geo_verzija;
 
         -- OLD.geom might be part of some intersections. If so, remove them.
@@ -356,10 +365,9 @@ $$;
 DROP TRIGGER IF EXISTS trg_validate_topology_incremental ON md_geo_obm;
 
 CREATE TRIGGER trg_validate_topology_incremental
-    BEFORE INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
+    BEFORE INSERT OR UPDATE OF geom, id_rel_geo_verzija OR DELETE ON md_geo_obm
     FOR EACH ROW
     EXECUTE FUNCTION validate_topology_incremental();
-
 
 
 

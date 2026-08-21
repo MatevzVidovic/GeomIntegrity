@@ -48,6 +48,9 @@ VALUES
     ('small_hole_left', uuid_generate_v4()),
     ('small_hole_strip', uuid_generate_v4()),
     ('small_hole_right', uuid_generate_v4()),
+    ('delayed_version', uuid_generate_v4()),
+    ('delayed_parent', uuid_generate_v4()),
+    ('delayed_child', uuid_generate_v4()),
     ('live_wide_intersection_version', uuid_generate_v4()),
     ('live_wide_intersection_a', uuid_generate_v4()),
     ('live_wide_intersection_b', uuid_generate_v4());
@@ -467,6 +470,74 @@ SELECT pg_temp.assert_true(
         WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='small_version_hole')
     ),
     'Delete-created small hole should not mutate another OBM from the row trigger'
+);
+
+\echo 'Case: assigning a delayed version processes existing geometry as an addition'
+INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='delayed_version'),
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    now()::timestamp,
+    99111,
+    false,
+    'AGENT_TEST_DELAYED_VERSION',
+    false
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='delayed_parent'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='delayed_version'),
+    'T_DELAYED_PARENT',
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))', 3794)
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='delayed_child'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    NULL,
+    'T_DELAYED_CHILD',
+    ST_GeomFromText('POLYGON((5 0, 10 0, 10 10, 5 10, 5 0))', 3794)
+);
+
+UPDATE md_geo_obm
+SET geom = ST_GeomFromText('POLYGON((0 0, 5 0, 5 10, 0 10, 0 0))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='delayed_parent');
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*)
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='delayed_version')
+          AND tip_topoloskega_problema = 'luknja'
+    ) = 1,
+    'Updating the original before assigning the child version should temporarily create one hole'
+);
+
+UPDATE md_geo_obm
+SET id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='delayed_version')
+WHERE id = (SELECT value FROM agent_ids WHERE key='delayed_child');
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*)
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='delayed_version')
+    ) = 0,
+    'Assigning the child version should reconcile the temporary hole without creating controls for the old NULL version'
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT abs(ST_Area(ST_Union(geom)) - 100) < 1e-6
+        FROM md_geo_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='delayed_version')
+    ),
+    'Delayed version assignment should preserve complete parent and child coverage'
 );
 
 \echo 'Case: live trigger keeps stricter small-topology threshold than preprocessing'
