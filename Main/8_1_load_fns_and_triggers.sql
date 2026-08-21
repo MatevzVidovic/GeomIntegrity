@@ -41,6 +41,7 @@
 \echo '  • md_geo_obm: trg_validate_topology_incremental'
 \echo '  • md_geo_obm: trg_validate_obm_hierarchy_incremental'
 \echo '  • md_geo_obmxcona: trg_validate_obmxcona_incremental'
+\echo '  • md_geo_cona/md_geo_lao/md_geo_tao: trg_ensure_snap_to_grid'
 \echo '  • md_geo_cona: trg_validate_cona_lao_incremental'
 \echo '  • md_geo_lao: trg_validate_lao_tao_incremental'
 \echo ''

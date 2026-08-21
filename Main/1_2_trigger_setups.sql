@@ -10,10 +10,13 @@
 
 \set ON_ERROR_STOP on
 
-\echo '[1/2] Loading OBM incremental trigger...'
+\echo '[1/3] Loading OBM incremental trigger...'
 \i /Users/matevzvidovic/GeomIntegrity/Main/3_1_trg_obm_geom_trigger.sql
 
-\echo '[2/2] Loading hierarchy incremental triggers...'
+\echo '[2/3] Loading hierarchy precision triggers...'
+\i /Users/matevzvidovic/GeomIntegrity/Main/3_2_trg_ensure_snap_to_grid_cone_lao_tao.sql
+
+\echo '[3/3] Loading hierarchy incremental triggers...'
 \i /Users/matevzvidovic/GeomIntegrity/Main/4_1_trg_hierarchy_triggers.sql
 
 \echo '✅ All triggers active.'

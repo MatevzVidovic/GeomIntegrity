@@ -88,20 +88,52 @@ VALUES
     ((SELECT value FROM agent_ids WHERE key='obm2'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='version1'), 'H_OBM_2', ST_GeomFromText('POLYGON((1 0, 2 0, 2 1, 1 1, 1 0))', 3794)),
     ((SELECT value FROM agent_ids WHERE key='obm3'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='version2'), 'H_OBM_3', ST_GeomFromText('POLYGON((5 5, 6 5, 6 6, 5 6, 5 5))', 3794));
 
-INSERT INTO md_geo_tao (id, created_at, created_by, id_rel_verzije_modeli, id_tao, drugi_tao)
+INSERT INTO md_geo_tao (id, created_at, created_by, id_rel_verzije_modeli, id_tao, drugi_tao, geom)
 VALUES
-    ((SELECT value FROM agent_ids WHERE key='tao1'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='model1'), 1, false),
-    ((SELECT value FROM agent_ids WHERE key='tao2'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='model2'), 2, false);
+    ((SELECT value FROM agent_ids WHERE key='tao1'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='model1'), 1, false, ST_GeomFromText('POLYGON((0.04 0.04, 1.04 0.04, 1.04 1.04, 0.04 1.04, 0.04 0.04))', 3794)),
+    ((SELECT value FROM agent_ids WHERE key='tao2'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='model2'), 2, false, NULL);
 
-INSERT INTO md_geo_lao (id, created_at, created_by, id_rel_geo_tao, id_rel_verzije_modeli, id_lao, ime_lao, drugi_lao)
+INSERT INTO md_geo_lao (id, created_at, created_by, id_rel_geo_tao, id_rel_verzije_modeli, id_lao, ime_lao, drugi_lao, geom)
 VALUES
-    ((SELECT value FROM agent_ids WHERE key='lao1'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='tao1'), (SELECT value FROM agent_ids WHERE key='model1'), 1, 'H_LAO_1', false),
-    ((SELECT value FROM agent_ids WHERE key='lao2'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='tao2'), (SELECT value FROM agent_ids WHERE key='model2'), 2, 'H_LAO_2', false);
+    ((SELECT value FROM agent_ids WHERE key='lao1'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='tao1'), (SELECT value FROM agent_ids WHERE key='model1'), 1, 'H_LAO_1', false, ST_GeomFromText('POLYGON((0.04 0.04, 1.04 0.04, 1.04 1.04, 0.04 1.04, 0.04 0.04))', 3794)),
+    ((SELECT value FROM agent_ids WHERE key='lao2'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='tao2'), (SELECT value FROM agent_ids WHERE key='model2'), 2, 'H_LAO_2', false, NULL);
 
-INSERT INTO md_geo_cona (id, created_at, created_by, id_rel_geo_lao, id_rel_verzije_modeli, ime_cone)
+INSERT INTO md_geo_cona (id, created_at, created_by, id_rel_geo_lao, id_rel_verzije_modeli, ime_cone, geom)
 VALUES
-    ((SELECT value FROM agent_ids WHERE key='cona1'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='lao1'), (SELECT value FROM agent_ids WHERE key='model1'), 'H_CONA_1'),
-    ((SELECT value FROM agent_ids WHERE key='cona2'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='lao2'), (SELECT value FROM agent_ids WHERE key='model2'), 'H_CONA_2');
+    ((SELECT value FROM agent_ids WHERE key='cona1'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='lao1'), (SELECT value FROM agent_ids WHERE key='model1'), 'H_CONA_1', ST_GeomFromText('POLYGON((0.04 0.04, 1.04 0.04, 1.04 1.04, 0.04 1.04, 0.04 0.04))', 3794)),
+    ((SELECT value FROM agent_ids WHERE key='cona2'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='lao2'), (SELECT value FROM agent_ids WHERE key='model2'), 'H_CONA_2', NULL);
+
+\echo 'Case: cona/LAO/TAO geometries snap on INSERT and UPDATE'
+SELECT pg_temp.assert_true(
+    (SELECT bool_and(ST_Equals(geom, ST_GeomFromText('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))', 3794)))
+     FROM (
+         SELECT geom FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona1')
+         UNION ALL
+         SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1')
+         UNION ALL
+         SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')
+     ) inserted_geometries),
+    'INSERT should snap cona, LAO, and TAO geometries to the 0.1 grid'
+);
+
+UPDATE md_geo_cona SET geom = ST_GeomFromText('POLYGON((2.04 2.04, 3.04 2.04, 3.04 3.04, 2.04 3.04, 2.04 2.04))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='cona1');
+UPDATE md_geo_lao SET geom = ST_GeomFromText('POLYGON((2.04 2.04, 3.04 2.04, 3.04 3.04, 2.04 3.04, 2.04 2.04))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='lao1');
+UPDATE md_geo_tao SET geom = ST_GeomFromText('POLYGON((2.04 2.04, 3.04 2.04, 3.04 3.04, 2.04 3.04, 2.04 2.04))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='tao1');
+
+SELECT pg_temp.assert_true(
+    (SELECT bool_and(ST_Equals(geom, ST_GeomFromText('POLYGON((2 2, 3 2, 3 3, 2 3, 2 2))', 3794)))
+     FROM (
+         SELECT geom FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona1')
+         UNION ALL
+         SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1')
+         UNION ALL
+         SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')
+     ) updated_geometries),
+    'UPDATE should snap cona, LAO, and TAO geometries to the 0.1 grid'
+);
 
 INSERT INTO md_geo_obmxcona (id, created_at, created_by, id_rel_geo_obm, id_rel_geo_cona)
 VALUES
