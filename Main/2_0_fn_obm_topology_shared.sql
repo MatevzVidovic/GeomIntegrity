@@ -42,6 +42,10 @@ AS $$
             WHERE area < 10
                 OR (
                     area < 100
+                    AND compactness < 0.1
+                )
+                OR (
+                    area < 1000
                     AND compactness < 0.01
                 )
         ),
@@ -67,7 +71,11 @@ AS $$
             FROM metrics
             WHERE area < 10
                 OR (
-                    area < 1000
+                    area < 100
+                    AND compactness < 0.1
+                )
+                OR (
+                    area < 2000
                     AND compactness < 0.01
                 )
         ),
