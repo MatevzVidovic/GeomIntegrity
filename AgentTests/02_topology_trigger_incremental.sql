@@ -494,6 +494,8 @@ VALUES (
     ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))', 3794)
 );
 
+TRUNCATE TABLE slo_meja;
+
 INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
 VALUES (
     (SELECT value FROM agent_ids WHERE key='delayed_child'),
@@ -501,7 +503,28 @@ VALUES (
     '00000000-0000-0000-0000-000000000000'::uuid,
     NULL,
     'T_DELAYED_CHILD',
-    ST_GeomFromText('POLYGON((5 0, 10 0, 10 10, 5 10, 5 0))', 3794)
+    ST_GeomFromText('POLYGON((5.1 0, 10 0, 10 10, 5.1 10, 5.1 0))', 3794)
+);
+
+UPDATE md_geo_obm
+SET geom = ST_GeomFromText('POLYGON((5 0, 10 0, 10 10, 5 10, 5 0))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='delayed_child');
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT abs(ST_Area(geom) - 50) < 1e-6
+        FROM md_geo_obm
+        WHERE id = (SELECT value FROM agent_ids WHERE key='delayed_child')
+    ),
+    'A NULL-version geometry update should bypass topology even when slo_meja is empty'
+);
+
+INSERT INTO slo_meja (id, created_at, created_by, geom)
+VALUES (
+    uuid_generate_v4(),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))', 3794)
 );
 
 UPDATE md_geo_obm

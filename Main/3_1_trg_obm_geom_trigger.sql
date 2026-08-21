@@ -44,6 +44,20 @@ BEGIN
         RETURN NEW;
     END IF;
 
+    -- Rows without a version do not participate in topology. A later
+    -- NULL-to-UUID update will process the existing geometry as an addition.
+    IF (TG_OP = 'INSERT' AND NEW.id_rel_geo_verzija IS NULL)
+       OR (TG_OP = 'DELETE' AND OLD.id_rel_geo_verzija IS NULL)
+       OR (TG_OP = 'UPDATE'
+           AND OLD.id_rel_geo_verzija IS NULL
+           AND NEW.id_rel_geo_verzija IS NULL) THEN
+        IF TG_OP = 'DELETE' THEN
+            RETURN OLD;
+        END IF;
+
+        RETURN NEW;
+    END IF;
+
     -- to prevent bogus holes we do this at the start of insert/update part
     -- v_insertion_geom := ensure_snap_to_grid(NEW.geom);
     -- and at the end of that part we do:
@@ -188,7 +202,8 @@ BEGIN
     -- ========================================================================
     -- PHASE 2: HANDLE ADDITION (INSERT or UPDATE)
     -- ========================================================================
-    IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') THEN
+    IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE')
+       AND NEW.id_rel_geo_verzija IS NOT NULL THEN
         v_id_rel_geo_verzija := NEW.id_rel_geo_verzija;
 
         -- NEW.geom is a potential new area. Snap it to the 0.01 grid.
@@ -368,8 +383,6 @@ CREATE TRIGGER trg_validate_topology_incremental
     BEFORE INSERT OR UPDATE OF geom, id_rel_geo_verzija OR DELETE ON md_geo_obm
     FOR EACH ROW
     EXECUTE FUNCTION validate_topology_incremental();
-
-
 
 
 
