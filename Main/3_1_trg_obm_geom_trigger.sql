@@ -18,6 +18,7 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 DECLARE
+    v_grid_size CONSTANT double precision := 0.01;
     v_slo_meja geometry;
     v_hole_geom geometry;
     v_single_hole_geom geometry;
@@ -87,8 +88,9 @@ BEGIN
     -- we then ST_Dump the union and insert new holes.
     -- This is necessary to handle cases where holes get split into 2 by the insertion.
 
-    -- Get Slovenia boundary
-    SELECT geom INTO v_slo_meja FROM slo_meja LIMIT 1;
+    -- Fixed-precision overlays require every input on the same grid. OBMs and
+    -- controls are normalized when stored; normalize the external boundary here.
+    SELECT ensure_snap_to_grid(geom) INTO v_slo_meja FROM slo_meja LIMIT 1;
 
     IF v_slo_meja IS NULL THEN
         RAISE EXCEPTION 'Slovenia boundary (slo_meja) not found';
@@ -113,12 +115,12 @@ BEGIN
         -- Remove from it the union of all obm that intersect it.
         SELECT ensure_snap_to_grid(ST_Difference(
             v_hole_geom, (
-                SELECT ST_Union(geom)
+                SELECT ST_Union(geom, v_grid_size)
                 FROM md_geo_obm
                 WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
                     AND ST_Intersects(geom, v_hole_geom) AND NOT ST_Touches(geom, v_hole_geom)
                     AND id != OLD.id
-            )
+            ), v_grid_size
         )) INTO v_possible_new_geom;
 
         -- is null when no intersections
@@ -128,13 +130,13 @@ BEGIN
 
         -- If it isn't ST_Covers(v_slo_meja, v_hole_geom), then remove the overflow from the hole.
         if not ST_Covers(v_slo_meja, v_hole_geom) then
-            v_hole_geom := ensure_snap_to_grid(ST_Intersection(v_hole_geom, v_slo_meja));
+            v_hole_geom := ensure_snap_to_grid(ST_Intersection(v_hole_geom, v_slo_meja, v_grid_size));
         end if;
 
         IF TG_OP = 'UPDATE' THEN
             v_insertion_geom := ensure_snap_to_grid(NEW.geom);
-            v_insertion_geom := ensure_snap_to_grid(st_intersection(v_insertion_geom, v_slo_meja));
-            v_hole_geom := ensure_snap_to_grid(ST_Difference(v_hole_geom, v_insertion_geom));
+            v_insertion_geom := ensure_snap_to_grid(ST_Intersection(v_insertion_geom, v_slo_meja, v_grid_size));
+            v_hole_geom := ensure_snap_to_grid(ST_Difference(v_hole_geom, v_insertion_geom, v_grid_size));
         END IF;
 
         -- Go see if any existing hole intersects it, and join them together if so.
@@ -147,7 +149,11 @@ BEGIN
               AND ST_Intersects(geom, v_hole_geom)
         );
 
-        SELECT ensure_snap_to_grid(ST_Union(ST_Union(geom), v_hole_geom))
+        SELECT ensure_snap_to_grid(ST_Union(
+            ST_Union(geom, v_grid_size),
+            v_hole_geom,
+            v_grid_size
+        ))
         INTO v_possible_new_geom
         FROM intersecting_holes;
 
@@ -183,7 +189,7 @@ BEGIN
 
                         UPDATE md_geo_obm
                         SET geom = ST_Multi(ensure_snap_to_grid(
-                            ST_Union(geom, v_single_hole_geom)
+                            ST_Union(geom, v_single_hole_geom, v_grid_size)
                         ))::geometry(MultiPolygon, 3794)
                         WHERE id = v_best_neighbor_id;
 
@@ -235,7 +241,7 @@ BEGIN
         v_insertion_geom := ensure_snap_to_grid(NEW.geom);
 
         -- if not covered by border, remove the overflow.
-        v_insertion_geom := ensure_snap_to_grid(st_intersection(v_insertion_geom, v_slo_meja));
+        v_insertion_geom := ensure_snap_to_grid(ST_Intersection(v_insertion_geom, v_slo_meja, v_grid_size));
 
         IF v_insertion_geom IS NULL THEN
             RAISE EXCEPTION 'OBM geometry collapsed after clipping to slo_meja';
@@ -247,7 +253,7 @@ BEGIN
         CREATE TEMP TABLE new_intersections ON COMMIT DROP AS (
             SELECT 
                 id as other_id, 
-                ensure_snap_to_grid((ST_Dump(st_intersection(geom, v_insertion_geom))).geom) as intersection_geom
+                ensure_snap_to_grid((ST_Dump(ST_Intersection(geom, v_insertion_geom, v_grid_size))).geom) as intersection_geom
             FROM md_geo_obm
             WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
               AND id != NEW.id
@@ -258,7 +264,7 @@ BEGIN
 
         -- autofix small - intersections
         IF obm_small_topology_autofix_enabled() THEN
-            SELECT ensure_snap_to_grid(ST_Union(intersection_geom))
+            SELECT ensure_snap_to_grid(ST_Union(intersection_geom, v_grid_size))
             INTO v_small_intersections_geom
             FROM new_intersections
             WHERE ST_GeometryType(intersection_geom) in ('ST_Polygon', 'ST_MultiPolygon')
@@ -268,7 +274,11 @@ BEGIN
         IF obm_small_topology_autofix_enabled()
            AND v_small_intersections_geom IS NOT NULL
            AND NOT ST_IsEmpty(v_small_intersections_geom) THEN
-            v_insertion_geom := ensure_snap_to_grid(ST_Difference(v_insertion_geom, v_small_intersections_geom));
+            v_insertion_geom := ensure_snap_to_grid(ST_Difference(
+                v_insertion_geom,
+                v_small_intersections_geom,
+                v_grid_size
+            ));
         END IF;
 
         -- With holes, we take all holes that intersect our insertion geom, we union them into a var,
@@ -285,10 +295,14 @@ BEGIN
             AND ST_Intersects(v_insertion_geom, geom)
         );
 
-        v_insertion_hole_union_geom := (SELECT ensure_snap_to_grid(st_union(geom))
+        v_insertion_hole_union_geom := (SELECT ensure_snap_to_grid(ST_Union(geom, v_grid_size))
                                         from md_topoloske_kontrole_obm
                                         where id in (select id from intersecting_holes));
-        v_insertion_hole_union_geom := ensure_snap_to_grid(st_difference(v_insertion_hole_union_geom, v_insertion_geom));
+        v_insertion_hole_union_geom := ensure_snap_to_grid(ST_Difference(
+            v_insertion_hole_union_geom,
+            v_insertion_geom,
+            v_grid_size
+        ));
 
         DELETE FROM md_topoloske_kontrole_obm
         WHERE id IN (select id from intersecting_holes);
@@ -304,7 +318,11 @@ BEGIN
                 -- autofix small - holes
                 IF obm_small_topology_autofix_enabled()
                    AND is_small_obm_topology_problem(v_single_hole_geom) THEN
-                    v_insertion_geom := ensure_snap_to_grid(ST_Union(v_insertion_geom, v_single_hole_geom));
+                    v_insertion_geom := ensure_snap_to_grid(ST_Union(
+                        v_insertion_geom,
+                        v_single_hole_geom,
+                        v_grid_size
+                    ));
                     CONTINUE;
                 END IF;
 
@@ -349,21 +367,22 @@ BEGIN
                 END IF;
 
                 SELECT ensure_snap_to_grid(ST_Union(
-                    ST_Intersection(geom, v_component_geom)
+                    ST_Intersection(geom, v_component_geom, v_grid_size),
+                    v_grid_size
                 ))
                 INTO v_component_overlap_geom
                 FROM md_geo_obm
                 WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
                   AND id <> NEW.id
                   AND ST_Intersects(geom, v_component_geom)
-                  AND ST_Area(ST_Intersection(geom, v_component_geom)) > 0;
+                  AND ST_Area(ST_Intersection(geom, v_component_geom, v_grid_size)) > 0;
 
                 IF v_component_overlap_geom IS NOT NULL THEN
                     v_insertion_geom := ensure_snap_to_grid(
-                        ST_Difference(v_insertion_geom, v_component_overlap_geom)
+                        ST_Difference(v_insertion_geom, v_component_overlap_geom, v_grid_size)
                     );
                     v_component_geom := ensure_snap_to_grid(
-                        ST_Difference(v_component_geom, v_component_overlap_geom)
+                        ST_Difference(v_component_geom, v_component_overlap_geom, v_grid_size)
                     );
                 END IF;
 
@@ -388,7 +407,7 @@ BEGIN
 
                     UPDATE md_geo_obm
                     SET geom = ST_Multi(ensure_snap_to_grid(
-                        ST_Union(geom, v_component_piece_geom)
+                        ST_Union(geom, v_component_piece_geom, v_grid_size)
                     ))::geometry(MultiPolygon, 3794)
                     WHERE id = v_best_neighbor_id;
 
@@ -397,7 +416,7 @@ BEGIN
 
                     IF v_updated_rows = 1 THEN
                         v_insertion_geom := ensure_snap_to_grid(
-                            ST_Difference(v_insertion_geom, v_component_piece_geom)
+                            ST_Difference(v_insertion_geom, v_component_piece_geom, v_grid_size)
                         );
                     END IF;
                 END LOOP;
@@ -409,7 +428,11 @@ BEGIN
         CREATE TEMP TABLE new_intersections ON COMMIT DROP AS (
             SELECT
                 id AS other_id,
-                ensure_snap_to_grid((ST_Dump(ST_Intersection(geom, v_insertion_geom))).geom) AS intersection_geom
+                ensure_snap_to_grid((ST_Dump(ST_Intersection(
+                    geom,
+                    v_insertion_geom,
+                    v_grid_size
+                ))).geom) AS intersection_geom
             FROM md_geo_obm
             WHERE id_rel_geo_verzija = v_id_rel_geo_verzija
               AND id <> NEW.id
@@ -478,8 +501,6 @@ CREATE TRIGGER trg_validate_topology_incremental
     BEFORE INSERT OR UPDATE OF geom, id_rel_geo_verzija OR DELETE ON md_geo_obm
     FOR EACH ROW
     EXECUTE FUNCTION validate_topology_incremental();
-
-
 
 
 

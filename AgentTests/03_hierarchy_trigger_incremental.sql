@@ -52,8 +52,10 @@ VALUES
     ('tao2', uuid_generate_v4()),
     ('lao1', uuid_generate_v4()),
     ('lao2', uuid_generate_v4()),
+    ('lao_null_child', uuid_generate_v4()),
     ('cona1', uuid_generate_v4()),
     ('cona2', uuid_generate_v4()),
+    ('cona_null_child', uuid_generate_v4()),
     ('fake_cona', uuid_generate_v4()),
     ('stale_problem1', uuid_generate_v4()),
     ('stale_problem2', uuid_generate_v4()),
@@ -93,46 +95,68 @@ VALUES
     ((SELECT value FROM agent_ids WHERE key='tao1'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='model1'), 1, false, ST_GeomFromText('POLYGON((0.04 0.04, 1.04 0.04, 1.04 1.04, 0.04 1.04, 0.04 0.04))', 3794)),
     ((SELECT value FROM agent_ids WHERE key='tao2'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='model2'), 2, false, NULL);
 
+\echo 'Case: childless TAO keeps manual snapped geometry'
+SELECT pg_temp.assert_true(
+    ST_Equals(
+        (SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')),
+        ST_GeomFromText('POLYGON((0.04 0.04, 1.04 0.04, 1.04 1.04, 0.04 1.04, 0.04 0.04))', 3794)
+    ),
+    'Childless TAO INSERT should preserve manual geometry on the 0.01 grid'
+);
+UPDATE md_geo_tao SET geom = ST_GeomFromText('POLYGON((7.04 7.04, 8.04 7.04, 8.04 8.04, 7.04 8.04, 7.04 7.04))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='tao1');
+SELECT pg_temp.assert_true(
+    ST_Equals(
+        (SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')),
+        ST_GeomFromText('POLYGON((7.04 7.04, 8.04 7.04, 8.04 8.04, 7.04 8.04, 7.04 7.04))', 3794)
+    ),
+    'Childless TAO UPDATE should preserve manual geometry on the 0.01 grid'
+);
+
 INSERT INTO md_geo_lao (id, created_at, created_by, id_rel_geo_tao, id_rel_verzije_modeli, id_lao, ime_lao, drugi_lao, geom)
 VALUES
     ((SELECT value FROM agent_ids WHERE key='lao1'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='tao1'), (SELECT value FROM agent_ids WHERE key='model1'), 1, 'H_LAO_1', false, ST_GeomFromText('POLYGON((0.04 0.04, 1.04 0.04, 1.04 1.04, 0.04 1.04, 0.04 0.04))', 3794)),
     ((SELECT value FROM agent_ids WHERE key='lao2'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='tao2'), (SELECT value FROM agent_ids WHERE key='model2'), 2, 'H_LAO_2', false, NULL);
+
+\echo 'Case: childless LAO keeps manual snapped geometry'
+SELECT pg_temp.assert_true(
+    ST_Equals(
+        (SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1')),
+        ST_GeomFromText('POLYGON((0.04 0.04, 1.04 0.04, 1.04 1.04, 0.04 1.04, 0.04 0.04))', 3794)
+    ),
+    'Childless LAO INSERT should preserve manual geometry on the 0.01 grid'
+);
+UPDATE md_geo_lao SET geom = ST_GeomFromText('POLYGON((6.04 6.04, 7.04 6.04, 7.04 7.04, 6.04 7.04, 6.04 6.04))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='lao1');
+SELECT pg_temp.assert_true(
+    ST_Equals(
+        (SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1')),
+        ST_GeomFromText('POLYGON((6.04 6.04, 7.04 6.04, 7.04 7.04, 6.04 7.04, 6.04 6.04))', 3794)
+    ),
+    'Childless LAO UPDATE should preserve manual geometry on the 0.01 grid'
+);
 
 INSERT INTO md_geo_cona (id, created_at, created_by, id_rel_geo_lao, id_rel_verzije_modeli, ime_cone, geom)
 VALUES
     ((SELECT value FROM agent_ids WHERE key='cona1'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='lao1'), (SELECT value FROM agent_ids WHERE key='model1'), 'H_CONA_1', ST_GeomFromText('POLYGON((0.04 0.04, 1.04 0.04, 1.04 1.04, 0.04 1.04, 0.04 0.04))', 3794)),
     ((SELECT value FROM agent_ids WHERE key='cona2'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='lao2'), (SELECT value FROM agent_ids WHERE key='model2'), 'H_CONA_2', NULL);
 
-\echo 'Case: cona/LAO/TAO geometries snap on INSERT and UPDATE'
+\echo 'Case: childless CONA keeps manual snapped geometry'
 SELECT pg_temp.assert_true(
-    (SELECT bool_and(ST_Equals(geom, ST_GeomFromText('POLYGON((0.04 0.04, 1.04 0.04, 1.04 1.04, 0.04 1.04, 0.04 0.04))', 3794)))
-     FROM (
-         SELECT geom FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona1')
-         UNION ALL
-         SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1')
-         UNION ALL
-         SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')
-     ) inserted_geometries),
-    'INSERT should preserve cona, LAO, and TAO geometries already on the 0.01 grid'
+    ST_Equals(
+        (SELECT geom FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona1')),
+        ST_GeomFromText('POLYGON((0.04 0.04, 1.04 0.04, 1.04 1.04, 0.04 1.04, 0.04 0.04))', 3794)
+    ),
+    'Childless CONA INSERT should preserve manual geometry on the 0.01 grid'
 );
-
-UPDATE md_geo_cona SET geom = ST_GeomFromText('POLYGON((2.04 2.04, 3.04 2.04, 3.04 3.04, 2.04 3.04, 2.04 2.04))', 3794)
+UPDATE md_geo_cona SET geom = ST_GeomFromText('POLYGON((5.04 5.04, 6.04 5.04, 6.04 6.04, 5.04 6.04, 5.04 5.04))', 3794)
 WHERE id = (SELECT value FROM agent_ids WHERE key='cona1');
-UPDATE md_geo_lao SET geom = ST_GeomFromText('POLYGON((2.04 2.04, 3.04 2.04, 3.04 3.04, 2.04 3.04, 2.04 2.04))', 3794)
-WHERE id = (SELECT value FROM agent_ids WHERE key='lao1');
-UPDATE md_geo_tao SET geom = ST_GeomFromText('POLYGON((2.04 2.04, 3.04 2.04, 3.04 3.04, 2.04 3.04, 2.04 2.04))', 3794)
-WHERE id = (SELECT value FROM agent_ids WHERE key='tao1');
-
 SELECT pg_temp.assert_true(
-    (SELECT bool_and(ST_Equals(geom, ST_GeomFromText('POLYGON((2.04 2.04, 3.04 2.04, 3.04 3.04, 2.04 3.04, 2.04 2.04))', 3794)))
-     FROM (
-         SELECT geom FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona1')
-         UNION ALL
-         SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1')
-         UNION ALL
-         SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')
-     ) updated_geometries),
-    'UPDATE should preserve cona, LAO, and TAO geometries already on the 0.01 grid'
+    ST_Equals(
+        (SELECT geom FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona1')),
+        ST_GeomFromText('POLYGON((5.04 5.04, 6.04 5.04, 6.04 6.04, 5.04 6.04, 5.04 5.04))', 3794)
+    ),
+    'Childless CONA UPDATE should preserve manual geometry on the 0.01 grid'
 );
 
 INSERT INTO md_geo_obmxcona (id, created_at, created_by, id_rel_geo_obm, id_rel_geo_cona)
@@ -141,7 +165,171 @@ VALUES
     (uuid_generate_v4(), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='obm2'), (SELECT value FROM agent_ids WHERE key='cona1')),
     (uuid_generate_v4(), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='obm3'), (SELECT value FROM agent_ids WHERE key='cona2'));
 
-\i /Users/matevzvidovic/GeomIntegrity/Main/4_1_trg_hierarchy_triggers.sql
+\echo 'Case: relations added after geometry rebuild the exact hierarchy union'
+SELECT pg_temp.assert_true(
+    (
+        SELECT bool_and(ST_Equals(geom, ST_GeomFromText('POLYGON((0 0,2 0,2 1,0 1,0 0))', 3794)))
+        FROM (
+            SELECT geom FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona1')
+            UNION ALL SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1')
+            UNION ALL SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')
+        ) hierarchy
+    ),
+    'Links added after split geometry should rebuild exact CONA, LAO, and TAO unions without holes'
+);
+
+UPDATE md_geo_cona SET geom = ST_GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='cona1');
+UPDATE md_geo_lao SET geom = ST_GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='lao1');
+UPDATE md_geo_tao SET geom = ST_GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='tao1');
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT bool_and(ST_Equals(geom, ST_GeomFromText('POLYGON((0 0,2 0,2 1,0 1,0 0))', 3794)))
+        FROM (
+            SELECT geom FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona1')
+            UNION ALL SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1')
+            UNION ALL SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')
+        ) hierarchy
+    ),
+    'Stale direct CONA, LAO, and TAO geometry writes should be replaced by their children'
+);
+
+INSERT INTO md_geo_lao (id, created_at, created_by, id_rel_verzije_modeli, id_lao, ime_lao, drugi_lao, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='lao_null_child'), now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='model1'), 3, 'H_LAO_NULL_CHILD', false, NULL
+);
+INSERT INTO md_geo_cona (id, created_at, created_by, id_rel_geo_lao, id_rel_verzije_modeli, ime_cone, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='cona_null_child'), now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='lao_null_child'),
+    (SELECT value FROM agent_ids WHERE key='model1'), 'H_CONA_NULL_CHILD', NULL
+);
+UPDATE md_geo_lao SET geom = ST_GeomFromText('POLYGON((7 7,8 7,8 8,7 8,7 7))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='lao_null_child');
+SELECT pg_temp.assert_true(
+    (SELECT geom IS NULL FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao_null_child')),
+    'A LAO with an existing NULL-geometry CONA child should reject a stale direct geometry write'
+);
+DELETE FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona_null_child');
+DELETE FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao_null_child');
+
+UPDATE md_geo_cona SET id_rel_geo_lao = (SELECT value FROM agent_ids WHERE key='lao2')
+WHERE id = (SELECT value FROM agent_ids WHERE key='cona1');
+SELECT pg_temp.assert_true(
+    (SELECT geom IS NULL FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1'))
+    AND (SELECT geom IS NULL FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1'))
+    AND ST_Equals(
+        (SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao2')),
+        hierarchy_lao_geom((SELECT value FROM agent_ids WHERE key='lao2'))
+    ) AND ST_Equals(
+        (SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao2')),
+        hierarchy_tao_geom((SELECT value FROM agent_ids WHERE key='tao2'))
+    ),
+    'Moving a CONA should refresh both old and new LAO/TAO ancestors'
+);
+UPDATE md_geo_cona SET id_rel_geo_lao = (SELECT value FROM agent_ids WHERE key='lao1')
+WHERE id = (SELECT value FROM agent_ids WHERE key='cona1');
+SELECT pg_temp.assert_true(
+    ST_Equals(
+        (SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1')),
+        ST_GeomFromText('POLYGON((0 0,2 0,2 1,0 1,0 0))', 3794)
+    ) AND ST_Equals(
+        (SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')),
+        ST_GeomFromText('POLYGON((0 0,2 0,2 1,0 1,0 0))', 3794)
+    ) AND ST_Equals(
+        (SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao2')),
+        hierarchy_lao_geom((SELECT value FROM agent_ids WHERE key='lao2'))
+    ) AND ST_Equals(
+        (SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao2')),
+        hierarchy_tao_geom((SELECT value FROM agent_ids WHERE key='tao2'))
+    ),
+    'Moving a CONA back should rebuild both old and new LAO/TAO chains'
+);
+
+UPDATE md_geo_cona SET id_rel_geo_lao_rd1 = (SELECT value FROM agent_ids WHERE key='lao2')
+WHERE id = (SELECT value FROM agent_ids WHERE key='cona1');
+SELECT pg_temp.assert_true(
+    ST_Equals(
+        (SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1')),
+        ST_GeomFromText('POLYGON((0 0,2 0,2 1,0 1,0 0))', 3794)
+    ) AND ST_Equals(
+        (SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao2')),
+        hierarchy_lao_geom((SELECT value FROM agent_ids WHERE key='lao2'))
+    ) AND ST_Equals(
+        (SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao2')),
+        hierarchy_tao_geom((SELECT value FROM agent_ids WHERE key='tao2'))
+    ),
+    'A secondary LAO relationship should refresh its LAO and TAO without changing the main chain'
+);
+UPDATE md_geo_cona SET id_rel_geo_lao_rd1 = NULL
+WHERE id = (SELECT value FROM agent_ids WHERE key='cona1');
+SELECT pg_temp.assert_true(
+    ST_Equals(
+        (SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao2')),
+        hierarchy_lao_geom((SELECT value FROM agent_ids WHERE key='lao2'))
+    ) AND ST_Equals(
+        (SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao2')),
+        hierarchy_tao_geom((SELECT value FROM agent_ids WHERE key='tao2'))
+    ),
+    'Removing a secondary LAO relationship should refresh its former LAO and TAO'
+);
+
+UPDATE md_geo_obmxcona SET id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona2')
+WHERE id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm1')
+  AND id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona1');
+UPDATE md_geo_obmxcona SET id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona2')
+WHERE id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm2')
+  AND id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona1');
+SELECT pg_temp.assert_true(
+    (SELECT geom IS NULL FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona1'))
+    AND (SELECT geom IS NULL FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1'))
+    AND (SELECT geom IS NULL FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1'))
+    AND ST_Equals(
+        (SELECT geom FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona2')),
+        hierarchy_cona_geom((SELECT value FROM agent_ids WHERE key='cona2'))
+    ),
+    'Moving final OBM relations should clear the old CONA chain and rebuild the new CONA'
+);
+UPDATE md_geo_obmxcona SET id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona1')
+WHERE id_rel_geo_obm IN ((SELECT value FROM agent_ids WHERE key='obm1'), (SELECT value FROM agent_ids WHERE key='obm2'))
+  AND id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona2');
+SELECT pg_temp.assert_true(
+    ST_Equals(
+        (SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')),
+        ST_GeomFromText('POLYGON((0 0,2 0,2 1,0 1,0 0))', 3794)
+    ),
+    'Restoring moved OBM relations should rebuild the old CONA chain'
+);
+
+DELETE FROM md_geo_obm WHERE id = (SELECT value FROM agent_ids WHERE key='obm2');
+SELECT pg_temp.assert_true(
+    ST_Equals(
+        (SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')),
+        ST_GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 3794)
+    ),
+    'Deleting an OBM should propagate its remaining-child union upward'
+);
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='obm2'), now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='version1'), 'H_OBM_2',
+    ST_GeomFromText('POLYGON((1 0,2 0,2 1,1 1,1 0))', 3794)
+);
+INSERT INTO md_geo_obmxcona (id, created_at, created_by, id_rel_geo_obm, id_rel_geo_cona)
+SELECT uuid_generate_v4(), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid,
+       (SELECT value FROM agent_ids WHERE key='obm2'), (SELECT value FROM agent_ids WHERE key='cona1')
+WHERE NOT EXISTS (
+    SELECT 1 FROM md_geo_obmxcona
+    WHERE id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm2')
+      AND id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona1')
+);
 
 SELECT * FROM validate_all_hierarchy((SELECT value FROM agent_ids WHERE key='model1'));
 SELECT * FROM validate_all_hierarchy((SELECT value FROM agent_ids WHERE key='model2'));
@@ -443,7 +631,8 @@ SELECT pg_temp.assert_true(
         WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
           AND tip_problema = 'LAO brez cone'
           AND problematicen_id = (SELECT value FROM agent_ids WHERE key='lao1')
-    ),
+    ) AND (SELECT geom IS NULL FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1'))
+      AND (SELECT geom IS NULL FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')),
     'DELETE cona should make lao1 empty'
 );
 
@@ -494,7 +683,7 @@ SELECT pg_temp.assert_true(
         WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
           AND tip_problema = 'TAO brez LAO'
           AND problematicen_id = (SELECT value FROM agent_ids WHERE key='tao1')
-    ),
+    ) AND (SELECT geom IS NULL FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')),
     'DELETE lao should make tao1 empty'
 );
 

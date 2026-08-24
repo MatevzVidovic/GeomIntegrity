@@ -59,8 +59,13 @@ VALUES
     ('delayed_parent', uuid_generate_v4()),
     ('delayed_child', uuid_generate_v4()),
     ('active_split_version', uuid_generate_v4()),
+    ('active_split_neighbor', uuid_generate_v4()),
     ('active_split_parent', uuid_generate_v4()),
     ('active_split_child', uuid_generate_v4()),
+    ('active_split_child2', uuid_generate_v4()),
+    ('active_split_group', uuid_generate_v4()),
+    ('active_split_child_group', uuid_generate_v4()),
+    ('active_split_child2_group', uuid_generate_v4()),
     ('components_version', uuid_generate_v4()),
     ('components_neighbor', uuid_generate_v4()),
     ('components_overlap', uuid_generate_v4()),
@@ -258,6 +263,14 @@ SELECT pg_temp.assert_true(
 );
 
 \echo 'Case: INSERT outside boundary clips NEW.geom'
+UPDATE slo_meja
+SET geom = ST_GeomFromText('POLYGON((0.004 0.004,3.004 0.004,3.004 3.004,0.004 3.004,0.004 0.004))', 3794);
+
+SELECT pg_temp.assert_true(
+    NOT (SELECT geom_is_on_2_decimal_grid(geom) FROM slo_meja LIMIT 1),
+    'Boundary fixture should exercise trigger-local grid normalization'
+);
+
 INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
 VALUES (
     (SELECT value FROM agent_ids WHERE key='obm_out'),
@@ -488,7 +501,38 @@ SELECT pg_temp.assert_true(
     'Delete-created small hole should not mutate another OBM from the row trigger'
 );
 
-\echo 'Case: updating an original after its split child is active fixes the residual hole'
+\echo 'Case: LIFT Rezanje create -> original update -> workflow update'
+TRUNCATE TABLE slo_meja;
+INSERT INTO slo_meja (id, created_at, created_by, geom)
+VALUES (
+    uuid_generate_v4(),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    ST_GeomFromText('POLYGON((0 0, 20 0, 20 10, 0 10, 0 0))', 3794)
+);
+
+WITH raw_piece (geom) AS (
+    VALUES
+        (ST_GeomFromText('POLYGON((0 0,5 0,5.3 2,4.8 4,5.4 6,4.9 8,5.2 10,0 10,0 0))', 3794)),
+        (ST_GeomFromText('POLYGON((5.01 0,20 0,20 3,5.06 3,5.29 2,5.01 0))', 3794)),
+        (ST_GeomFromText('POLYGON((5.06 3,20 3,20 6,5.39 6,4.79 4,5.06 3))', 3794)),
+        (ST_GeomFromText('POLYGON((5.39 6,20 6,20 10,5.19 10,4.91 8,5.39 6))', 3794))
+), raw_union AS (
+    SELECT ST_Union(geom, 0.01) AS geom FROM raw_piece
+)
+SELECT pg_temp.assert_true(
+    EXISTS (
+        SELECT 1
+        FROM raw_piece a
+        JOIN raw_piece b ON ST_AsEWKB(a.geom) < ST_AsEWKB(b.geom)
+        WHERE ST_Area(ST_Intersection(a.geom, b.geom, 0.01)) > 0
+    ) AND (
+        SELECT ST_Area(ST_Difference(s.geom, r.geom, 0.01)) > 0
+        FROM slo_meja s CROSS JOIN raw_union r
+    ),
+    'Submitted slanted pieces should contain alternating tiny overlaps and gaps before reconciliation'
+);
+
 INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
 VALUES (
     (SELECT value FROM agent_ids WHERE key='active_split_version'),
@@ -500,31 +544,96 @@ VALUES (
     false
 );
 
-INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
-VALUES (
-    (SELECT value FROM agent_ids WHERE key='active_split_parent'),
-    now()::timestamp,
-    '00000000-0000-0000-0000-000000000000'::uuid,
-    (SELECT value FROM agent_ids WHERE key='active_split_version'),
-    'T_ACTIVE_SPLIT_PARENT',
-    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))', 3794)
+INSERT INTO md_geo_obm (
+    id,
+    created_at,
+    created_by,
+    id_rel_geo_verzija,
+    ime_obmocja,
+    split_group_id,
+    geom
+)
+VALUES
+    (
+        (SELECT value FROM agent_ids WHERE key='active_split_neighbor'),
+        now()::timestamp,
+        '00000000-0000-0000-0000-000000000000'::uuid,
+        (SELECT value FROM agent_ids WHERE key='active_split_version'),
+        'T_ACTIVE_SPLIT_NEIGHBOR',
+        NULL,
+        ST_GeomFromText('POLYGON((0 0,5 0,5.3 2,4.8 4,5.4 6,4.9 8,5.2 10,0 10,0 0))', 3794)
+    ),
+    (
+        (SELECT value FROM agent_ids WHERE key='active_split_parent'),
+        now()::timestamp,
+        '00000000-0000-0000-0000-000000000000'::uuid,
+        (SELECT value FROM agent_ids WHERE key='active_split_version'),
+        'T_ACTIVE_SPLIT_PARENT',
+        (SELECT value FROM agent_ids WHERE key='active_split_group'),
+        ST_GeomFromText('POLYGON((5 0,20 0,20 10,5.2 10,4.9 8,5.4 6,4.8 4,5.3 2,5 0))', 3794)
+    );
+
+-- LIFT saveExtractedPart first creates the extracted part with copied fields.
+-- Independent rounding alternates tiny gaps and overlaps along the unchanged neighbor.
+INSERT INTO md_geo_obm (
+    id,
+    created_at,
+    created_by,
+    id_rel_geo_verzija,
+    ime_obmocja,
+    split_group_id,
+    geom
+)
+VALUES
+    (
+        (SELECT value FROM agent_ids WHERE key='active_split_child'),
+        now()::timestamp,
+        '00000000-0000-0000-0000-000000000000'::uuid,
+        (SELECT value FROM agent_ids WHERE key='active_split_version'),
+        'T_ACTIVE_SPLIT_CHILD',
+        (SELECT value FROM agent_ids WHERE key='active_split_group'),
+        ST_GeomFromText('POLYGON((5.39 6,20 6,20 10,5.19 10,4.91 8,5.39 6))', 3794)
+    ),
+    (
+        (SELECT value FROM agent_ids WHERE key='active_split_child2'),
+        now()::timestamp,
+        '00000000-0000-0000-0000-000000000000'::uuid,
+        (SELECT value FROM agent_ids WHERE key='active_split_version'),
+        'T_ACTIVE_SPLIT_CHILD_2',
+        (SELECT value FROM agent_ids WHERE key='active_split_group'),
+        ST_GeomFromText('POLYGON((5.06 3,20 3,20 6,5.39 6,4.79 4,5.06 3))', 3794)
+    );
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*)
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='active_split_version')
+          AND tip_topoloskega_problema = 'prekrivanje'
+    ) >= 2,
+    'LIFT children should be created while the original still occupies both extracted areas'
 );
 
--- This matches the observed split order: the child participates in topology
--- before the original geometry is reduced.
-INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
-VALUES (
-    (SELECT value FROM agent_ids WHERE key='active_split_child'),
-    now()::timestamp,
-    '00000000-0000-0000-0000-000000000000'::uuid,
-    (SELECT value FROM agent_ids WHERE key='active_split_version'),
-    'T_ACTIVE_SPLIT_CHILD',
-    ST_GeomFromText('POLYGON((5 0, 10 0, 10 10, 5 10, 5 0))', 3794)
-);
+-- The frontend updates the original only after child creation succeeds.
+UPDATE md_geo_obm
+SET geom = ST_GeomFromText('POLYGON((5.01 0,20 0,20 3,5.06 3,5.29 2,5.01 0))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='active_split_parent');
+
+-- GeoObmSplitWorkflow later copies attributes and rotates split_group_id.
+-- It writes id_rel_geo_verzija even though the copied value is unchanged.
+UPDATE md_geo_obm
+SET id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='active_split_version'),
+    kopiran_id = NULL,
+    ime_obmocja = NULL,
+    split_group_id = (SELECT value FROM agent_ids WHERE key='active_split_child_group')
+WHERE id = (SELECT value FROM agent_ids WHERE key='active_split_child');
 
 UPDATE md_geo_obm
-SET geom = ST_GeomFromText('POLYGON((0 0, 4.99 0, 4.99 10, 0 10, 0 0))', 3794)
-WHERE id = (SELECT value FROM agent_ids WHERE key='active_split_parent');
+SET id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='active_split_version'),
+    kopiran_id = NULL,
+    ime_obmocja = NULL,
+    split_group_id = (SELECT value FROM agent_ids WHERE key='active_split_child2_group')
+WHERE id = (SELECT value FROM agent_ids WHERE key='active_split_child2');
 
 SELECT pg_temp.assert_true(
     (
@@ -532,25 +641,53 @@ SELECT pg_temp.assert_true(
         FROM md_topoloske_kontrole_obm
         WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='active_split_version')
     ) = 0,
-    'The residual split hole should be fixed without leaving a topology control'
+    'The complete LIFT Rezanje sequence should not leave a topology control'
 );
 
 SELECT pg_temp.assert_true(
     (
-        SELECT abs(ST_Area(geom) - 49.9) < 1e-6
-        FROM md_geo_obm
-        WHERE id = (SELECT value FROM agent_ids WHERE key='active_split_parent')
-    ),
-    'Fixing the residual split hole should preserve the updated original geometry'
-);
-
-SELECT pg_temp.assert_true(
-    (
-        SELECT abs(ST_Area(ST_Union(geom)) - 100) < 1e-6
+        SELECT bool_and(ST_NumGeometries(geom) = 1)
         FROM md_geo_obm
         WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='active_split_version')
     ),
-    'The split parent and child should retain complete coverage'
+    'LIFT Rezanje should keep the neighbor and all three split pieces single-part'
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT abs(ST_Area(ST_Union(geom, 0.01)) - 200) < 1e-6
+        FROM md_geo_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='active_split_version')
+    ) AND NOT EXISTS (
+        SELECT 1
+        FROM md_geo_obm a
+        JOIN md_geo_obm b ON a.id < b.id
+        WHERE a.id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='active_split_version')
+          AND b.id_rel_geo_verzija = a.id_rel_geo_verzija
+          AND ST_Area(ST_Intersection(a.geom, b.geom, 0.01)) > 0
+    ) AND NOT EXISTS (
+        SELECT 1
+        FROM get_obm_hole_candidates((SELECT value FROM agent_ids WHERE key='active_split_version'))
+    ),
+    'LIFT Rezanje should preserve complete coverage without holes or overlaps'
+);
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT bool_and(
+            id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='active_split_version')
+            AND split_group_id IN (
+                (SELECT value FROM agent_ids WHERE key='active_split_child_group'),
+                (SELECT value FROM agent_ids WHERE key='active_split_child2_group')
+            )
+        )
+        FROM md_geo_obm
+        WHERE id IN (
+            (SELECT value FROM agent_ids WHERE key='active_split_child'),
+            (SELECT value FROM agent_ids WHERE key='active_split_child2')
+        )
+    ),
+    'LIFT workflow updates should keep both children versioned and rotate their split groups'
 );
 
 \echo 'Case: assigning a delayed version processes existing geometry as an addition'
@@ -775,7 +912,7 @@ SELECT pg_temp.assert_true(
     'A non-small secondary component should remain'
 );
 
-\echo 'Case: live trigger keeps stricter small-topology threshold than preprocessing'
+\echo 'Case: live trigger autofixes a 200m2 very-low-compactness overlap'
 TRUNCATE TABLE slo_meja;
 INSERT INTO slo_meja (id, created_at, created_by, geom)
 VALUES (
@@ -818,21 +955,21 @@ VALUES (
 
 SELECT pg_temp.assert_true(
     (
-        SELECT COUNT(*) = 1
+        SELECT COUNT(*) = 0
         FROM md_topoloske_kontrole_obm
         WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='live_wide_intersection_version')
           AND tip_topoloskega_problema = 'prekrivanje'
     ),
-    'Live trigger should report the 200m2 skinny overlap because only preprocessing uses the wider threshold'
+    'Live trigger should autofix the 200m2 very-low-compactness overlap without a control'
 );
 
 SELECT pg_temp.assert_true(
     (
-        SELECT abs(SUM(ST_Area(geom)) - 1200) < 1e-6
+        SELECT abs(SUM(ST_Area(geom)) - 1000) < 1e-6
         FROM md_geo_obm
         WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='live_wide_intersection_version')
     ),
-    'Live trigger should not autofix the 200m2 skinny overlap'
+    'Autofixing the 200m2 overlap should leave exactly 1000m2 of stored geometry'
 );
 
 \echo 'All assertions passed for AgentTests 02'
