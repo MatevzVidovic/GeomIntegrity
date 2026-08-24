@@ -165,7 +165,15 @@ VALUES
     (uuid_generate_v4(), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='obm2'), (SELECT value FROM agent_ids WHERE key='cona1')),
     (uuid_generate_v4(), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='obm3'), (SELECT value FROM agent_ids WHERE key='cona2'));
 
-\echo 'Case: relations added after geometry rebuild the exact hierarchy union'
+-- Simulate the hierarchy writes performed by FMP after changing OBMs/relations.
+UPDATE md_geo_cona SET geom = geom
+WHERE id IN ((SELECT value FROM agent_ids WHERE key='cona1'), (SELECT value FROM agent_ids WHERE key='cona2'));
+UPDATE md_geo_lao SET geom = geom
+WHERE id IN ((SELECT value FROM agent_ids WHERE key='lao1'), (SELECT value FROM agent_ids WHERE key='lao2'));
+UPDATE md_geo_tao SET geom = geom
+WHERE id IN ((SELECT value FROM agent_ids WHERE key='tao1'), (SELECT value FROM agent_ids WHERE key='tao2'));
+
+\echo 'Case: FMP hierarchy writes rebuild the exact hierarchy union'
 SELECT pg_temp.assert_true(
     (
         SELECT bool_and(ST_Equals(geom, ST_GeomFromText('POLYGON((0 0,2 0,2 1,0 1,0 0))', 3794)))
@@ -218,118 +226,6 @@ SELECT pg_temp.assert_true(
 );
 DELETE FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona_null_child');
 DELETE FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao_null_child');
-
-UPDATE md_geo_cona SET id_rel_geo_lao = (SELECT value FROM agent_ids WHERE key='lao2')
-WHERE id = (SELECT value FROM agent_ids WHERE key='cona1');
-SELECT pg_temp.assert_true(
-    (SELECT geom IS NULL FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1'))
-    AND (SELECT geom IS NULL FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1'))
-    AND ST_Equals(
-        (SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao2')),
-        hierarchy_lao_geom((SELECT value FROM agent_ids WHERE key='lao2'))
-    ) AND ST_Equals(
-        (SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao2')),
-        hierarchy_tao_geom((SELECT value FROM agent_ids WHERE key='tao2'))
-    ),
-    'Moving a CONA should refresh both old and new LAO/TAO ancestors'
-);
-UPDATE md_geo_cona SET id_rel_geo_lao = (SELECT value FROM agent_ids WHERE key='lao1')
-WHERE id = (SELECT value FROM agent_ids WHERE key='cona1');
-SELECT pg_temp.assert_true(
-    ST_Equals(
-        (SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1')),
-        ST_GeomFromText('POLYGON((0 0,2 0,2 1,0 1,0 0))', 3794)
-    ) AND ST_Equals(
-        (SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')),
-        ST_GeomFromText('POLYGON((0 0,2 0,2 1,0 1,0 0))', 3794)
-    ) AND ST_Equals(
-        (SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao2')),
-        hierarchy_lao_geom((SELECT value FROM agent_ids WHERE key='lao2'))
-    ) AND ST_Equals(
-        (SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao2')),
-        hierarchy_tao_geom((SELECT value FROM agent_ids WHERE key='tao2'))
-    ),
-    'Moving a CONA back should rebuild both old and new LAO/TAO chains'
-);
-
-UPDATE md_geo_cona SET id_rel_geo_lao_rd1 = (SELECT value FROM agent_ids WHERE key='lao2')
-WHERE id = (SELECT value FROM agent_ids WHERE key='cona1');
-SELECT pg_temp.assert_true(
-    ST_Equals(
-        (SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1')),
-        ST_GeomFromText('POLYGON((0 0,2 0,2 1,0 1,0 0))', 3794)
-    ) AND ST_Equals(
-        (SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao2')),
-        hierarchy_lao_geom((SELECT value FROM agent_ids WHERE key='lao2'))
-    ) AND ST_Equals(
-        (SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao2')),
-        hierarchy_tao_geom((SELECT value FROM agent_ids WHERE key='tao2'))
-    ),
-    'A secondary LAO relationship should refresh its LAO and TAO without changing the main chain'
-);
-UPDATE md_geo_cona SET id_rel_geo_lao_rd1 = NULL
-WHERE id = (SELECT value FROM agent_ids WHERE key='cona1');
-SELECT pg_temp.assert_true(
-    ST_Equals(
-        (SELECT geom FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao2')),
-        hierarchy_lao_geom((SELECT value FROM agent_ids WHERE key='lao2'))
-    ) AND ST_Equals(
-        (SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao2')),
-        hierarchy_tao_geom((SELECT value FROM agent_ids WHERE key='tao2'))
-    ),
-    'Removing a secondary LAO relationship should refresh its former LAO and TAO'
-);
-
-UPDATE md_geo_obmxcona SET id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona2')
-WHERE id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm1')
-  AND id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona1');
-UPDATE md_geo_obmxcona SET id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona2')
-WHERE id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm2')
-  AND id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona1');
-SELECT pg_temp.assert_true(
-    (SELECT geom IS NULL FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona1'))
-    AND (SELECT geom IS NULL FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1'))
-    AND (SELECT geom IS NULL FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1'))
-    AND ST_Equals(
-        (SELECT geom FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona2')),
-        hierarchy_cona_geom((SELECT value FROM agent_ids WHERE key='cona2'))
-    ),
-    'Moving final OBM relations should clear the old CONA chain and rebuild the new CONA'
-);
-UPDATE md_geo_obmxcona SET id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona1')
-WHERE id_rel_geo_obm IN ((SELECT value FROM agent_ids WHERE key='obm1'), (SELECT value FROM agent_ids WHERE key='obm2'))
-  AND id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona2');
-SELECT pg_temp.assert_true(
-    ST_Equals(
-        (SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')),
-        ST_GeomFromText('POLYGON((0 0,2 0,2 1,0 1,0 0))', 3794)
-    ),
-    'Restoring moved OBM relations should rebuild the old CONA chain'
-);
-
-DELETE FROM md_geo_obm WHERE id = (SELECT value FROM agent_ids WHERE key='obm2');
-SELECT pg_temp.assert_true(
-    ST_Equals(
-        (SELECT geom FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')),
-        ST_GeomFromText('POLYGON((0 0,1 0,1 1,0 1,0 0))', 3794)
-    ),
-    'Deleting an OBM should propagate its remaining-child union upward'
-);
-INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
-VALUES (
-    (SELECT value FROM agent_ids WHERE key='obm2'), now()::timestamp,
-    '00000000-0000-0000-0000-000000000000'::uuid,
-    (SELECT value FROM agent_ids WHERE key='version1'), 'H_OBM_2',
-    ST_GeomFromText('POLYGON((1 0,2 0,2 1,1 1,1 0))', 3794)
-);
-INSERT INTO md_geo_obmxcona (id, created_at, created_by, id_rel_geo_obm, id_rel_geo_cona)
-SELECT uuid_generate_v4(), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid,
-       (SELECT value FROM agent_ids WHERE key='obm2'), (SELECT value FROM agent_ids WHERE key='cona1')
-WHERE NOT EXISTS (
-    SELECT 1 FROM md_geo_obmxcona
-    WHERE id_rel_geo_obm = (SELECT value FROM agent_ids WHERE key='obm2')
-      AND id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona1')
-);
 
 SELECT * FROM validate_all_hierarchy((SELECT value FROM agent_ids WHERE key='model1'));
 SELECT * FROM validate_all_hierarchy((SELECT value FROM agent_ids WHERE key='model2'));
@@ -631,8 +527,7 @@ SELECT pg_temp.assert_true(
         WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
           AND tip_problema = 'LAO brez cone'
           AND problematicen_id = (SELECT value FROM agent_ids WHERE key='lao1')
-    ) AND (SELECT geom IS NULL FROM md_geo_lao WHERE id = (SELECT value FROM agent_ids WHERE key='lao1'))
-      AND (SELECT geom IS NULL FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')),
+    ),
     'DELETE cona should make lao1 empty'
 );
 
@@ -683,7 +578,7 @@ SELECT pg_temp.assert_true(
         WHERE id_rel_verzije_modeli = (SELECT value FROM agent_ids WHERE key='model1')
           AND tip_problema = 'TAO brez LAO'
           AND problematicen_id = (SELECT value FROM agent_ids WHERE key='tao1')
-    ) AND (SELECT geom IS NULL FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao1')),
+    ),
     'DELETE lao should make tao1 empty'
 );
 

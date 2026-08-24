@@ -37,6 +37,51 @@ RETURNS geometry LANGUAGE sql STABLE AS $$
     FROM md_geo_lao l WHERE l.id_rel_geo_tao = p_id AND l.geom IS NOT NULL
 $$;
 
+-- Child rows win whenever children exist, even if their derived union is NULL.
+CREATE FUNCTION trg_ensure_snap_to_grid()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE v_geom geometry;
+BEGIN
+    IF TG_TABLE_NAME = 'md_geo_cona' THEN
+        IF EXISTS (
+            SELECT 1 FROM md_geo_obmxcona x
+            JOIN md_geo_obm o ON o.id = x.id_rel_geo_obm
+            WHERE x.id_rel_geo_cona = NEW.id
+        ) THEN SELECT hierarchy_cona_geom(NEW.id) INTO v_geom;
+        ELSE NEW.geom := ensure_snap_to_grid(NEW.geom); RETURN NEW;
+        END IF;
+    ELSIF TG_TABLE_NAME = 'md_geo_lao' THEN
+        IF EXISTS (SELECT 1 FROM md_geo_cona WHERE id_rel_geo_lao = NEW.id OR id_rel_geo_lao_rd1 = NEW.id)
+        THEN SELECT hierarchy_lao_geom(NEW.id) INTO v_geom;
+        ELSE NEW.geom := ensure_snap_to_grid(NEW.geom); RETURN NEW;
+        END IF;
+    ELSE
+        IF EXISTS (SELECT 1 FROM md_geo_lao WHERE id_rel_geo_tao = NEW.id)
+        THEN SELECT hierarchy_tao_geom(NEW.id) INTO v_geom;
+        ELSE NEW.geom := ensure_snap_to_grid(NEW.geom); RETURN NEW;
+        END IF;
+    END IF;
+    NEW.geom := v_geom;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_ensure_snap_to_grid BEFORE INSERT OR UPDATE ON md_geo_cona
+    FOR EACH ROW EXECUTE FUNCTION trg_ensure_snap_to_grid();
+CREATE TRIGGER trg_ensure_snap_to_grid BEFORE INSERT OR UPDATE ON md_geo_lao
+    FOR EACH ROW EXECUTE FUNCTION trg_ensure_snap_to_grid();
+CREATE TRIGGER trg_ensure_snap_to_grid BEFORE INSERT OR UPDATE ON md_geo_tao
+    FOR EACH ROW EXECUTE FUNCTION trg_ensure_snap_to_grid();
+
+-- The upward OBM -> CONA -> LAO -> TAO cascade is intentionally disabled.
+-- FMP writes each hierarchy row; the BEFORE trigger above recalculates that row once.
+
+
+-- Optional hierarchy cascade
+--
+-- This is intentionally commented out. The active DROP statements at the top
+-- still remove an older deployed cascade. Uncomment this block to restore it.
+/*
 CREATE FUNCTION hierarchy_refresh_cona(p_id uuid)
 RETURNS void LANGUAGE plpgsql AS $$
 DECLARE v_geom geometry;
@@ -76,35 +121,6 @@ BEGIN
 END;
 $$;
 
--- Child rows win whenever children exist, even if their derived union is NULL.
-CREATE FUNCTION trg_ensure_snap_to_grid()
-RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE v_geom geometry;
-BEGIN
-    IF TG_TABLE_NAME = 'md_geo_cona' THEN
-        IF EXISTS (
-            SELECT 1 FROM md_geo_obmxcona x
-            JOIN md_geo_obm o ON o.id = x.id_rel_geo_obm
-            WHERE x.id_rel_geo_cona = NEW.id
-        ) THEN SELECT hierarchy_cona_geom(NEW.id) INTO v_geom;
-        ELSE NEW.geom := ensure_snap_to_grid(NEW.geom); RETURN NEW;
-        END IF;
-    ELSIF TG_TABLE_NAME = 'md_geo_lao' THEN
-        IF EXISTS (SELECT 1 FROM md_geo_cona WHERE id_rel_geo_lao = NEW.id OR id_rel_geo_lao_rd1 = NEW.id)
-        THEN SELECT hierarchy_lao_geom(NEW.id) INTO v_geom;
-        ELSE NEW.geom := ensure_snap_to_grid(NEW.geom); RETURN NEW;
-        END IF;
-    ELSE
-        IF EXISTS (SELECT 1 FROM md_geo_lao WHERE id_rel_geo_tao = NEW.id)
-        THEN SELECT hierarchy_tao_geom(NEW.id) INTO v_geom;
-        ELSE NEW.geom := ensure_snap_to_grid(NEW.geom); RETURN NEW;
-        END IF;
-    END IF;
-    NEW.geom := v_geom;
-    RETURN NEW;
-END;
-$$;
-
 CREATE FUNCTION hierarchy_cascade()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE v_id uuid;
@@ -135,13 +151,6 @@ BEGIN
 END;
 $$;
 
-CREATE TRIGGER trg_ensure_snap_to_grid BEFORE INSERT OR UPDATE ON md_geo_cona
-    FOR EACH ROW EXECUTE FUNCTION trg_ensure_snap_to_grid();
-CREATE TRIGGER trg_ensure_snap_to_grid BEFORE INSERT OR UPDATE ON md_geo_lao
-    FOR EACH ROW EXECUTE FUNCTION trg_ensure_snap_to_grid();
-CREATE TRIGGER trg_ensure_snap_to_grid BEFORE INSERT OR UPDATE ON md_geo_tao
-    FOR EACH ROW EXECUTE FUNCTION trg_ensure_snap_to_grid();
-
 CREATE TRIGGER trg_refresh_hierarchy_from_obm
     AFTER INSERT OR UPDATE OF geom OR DELETE ON md_geo_obm
     FOR EACH ROW EXECUTE FUNCTION hierarchy_cascade();
@@ -154,3 +163,4 @@ CREATE TRIGGER trg_refresh_hierarchy_from_cona
 CREATE TRIGGER trg_refresh_hierarchy_from_lao
     AFTER INSERT OR UPDATE OF geom, id_rel_geo_tao OR DELETE ON md_geo_lao
     FOR EACH ROW EXECUTE FUNCTION hierarchy_cascade();
+*/
