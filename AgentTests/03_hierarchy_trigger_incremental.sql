@@ -50,12 +50,14 @@ VALUES
     ('model2', uuid_generate_v4()),
     ('tao1', uuid_generate_v4()),
     ('tao2', uuid_generate_v4()),
+    ('tao_holes', uuid_generate_v4()),
     ('lao1', uuid_generate_v4()),
     ('lao2', uuid_generate_v4()),
     ('lao_null_child', uuid_generate_v4()),
     ('cona1', uuid_generate_v4()),
     ('cona2', uuid_generate_v4()),
     ('cona_null_child', uuid_generate_v4()),
+    ('cona_artifact', uuid_generate_v4()),
     ('fake_cona', uuid_generate_v4()),
     ('stale_problem1', uuid_generate_v4()),
     ('stale_problem2', uuid_generate_v4()),
@@ -63,7 +65,8 @@ VALUES
     ('obm1', uuid_generate_v4()),
     ('obm2', uuid_generate_v4()),
     ('obm3', uuid_generate_v4()),
-    ('obm4', uuid_generate_v4());
+    ('obm4', uuid_generate_v4()),
+    ('obm_artifact', uuid_generate_v4());
 
 TRUNCATE TABLE slo_meja;
 INSERT INTO slo_meja (id, created_at, created_by, geom)
@@ -93,7 +96,20 @@ VALUES
 INSERT INTO md_geo_tao (id, created_at, created_by, id_rel_verzije_modeli, id_tao, drugi_tao, geom)
 VALUES
     ((SELECT value FROM agent_ids WHERE key='tao1'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='model1'), 1, false, ST_GeomFromText('POLYGON((0.04 0.04, 1.04 0.04, 1.04 1.04, 0.04 1.04, 0.04 0.04))', 3794)),
-    ((SELECT value FROM agent_ids WHERE key='tao2'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='model2'), 2, false, NULL);
+    ((SELECT value FROM agent_ids WHERE key='tao2'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='model2'), 2, false, NULL),
+    ((SELECT value FROM agent_ids WHERE key='tao_holes'), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid, (SELECT value FROM agent_ids WHERE key='model1'), 3, false,
+     ST_GeomFromText('MULTIPOLYGON(((0 0,40 0,40 40,0 40,0 0),(2 2,3 2,3 3,2 3,2 2),(10 10,30 10,30 30,10 30,10 10)))', 3794));
+
+\echo 'Case: hierarchy geometry fills small interior rings and keeps legitimate holes'
+SELECT pg_temp.assert_true(
+    (
+        SELECT ST_Area(geom) = 1200
+           AND (SELECT sum(ST_NumInteriorRings(part.geom)) FROM ST_Dump(geom) part) = 1
+        FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao_holes')
+    ),
+    'Hierarchy cleanup should fill the 1m2 hole and retain the 400m2 hole'
+);
+DELETE FROM md_geo_tao WHERE id = (SELECT value FROM agent_ids WHERE key='tao_holes');
 
 \echo 'Case: childless TAO keeps manual snapped geometry'
 SELECT pg_temp.assert_true(
@@ -204,6 +220,39 @@ SELECT pg_temp.assert_true(
     ),
     'Stale direct CONA, LAO, and TAO geometry writes should be replaced by their children'
 );
+
+\echo 'Case: child-derived CONA geometry also fills small holes'
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='obm_artifact'), now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid, NULL, 'H_OBM_ARTIFACT',
+    ST_GeomFromText('POLYGON((20 20,30 20,30 30,20 30,20 20),(24 24,24.5 24,24.5 24.5,24 24.5,24 24))', 3794)
+);
+INSERT INTO md_geo_cona (id, created_at, created_by, id_rel_geo_lao, id_rel_verzije_modeli, ime_cone, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='cona_artifact'), now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid, NULL,
+    (SELECT value FROM agent_ids WHERE key='model1'), 'H_CONA_ARTIFACT', NULL
+);
+INSERT INTO md_geo_obmxcona (id, created_at, created_by, id_rel_geo_obm, id_rel_geo_cona)
+VALUES (
+    uuid_generate_v4(), now()::timestamp, '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='obm_artifact'),
+    (SELECT value FROM agent_ids WHERE key='cona_artifact')
+);
+UPDATE md_geo_cona SET geom = geom
+WHERE id = (SELECT value FROM agent_ids WHERE key='cona_artifact');
+SELECT pg_temp.assert_true(
+    ST_Equals(
+        (SELECT geom FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona_artifact')),
+        ST_GeomFromText('POLYGON((20 20,30 20,30 30,20 30,20 20))', 3794)
+    ),
+    'CONA recomputation should derive its child geometry and fill the small interior ring'
+);
+DELETE FROM md_geo_obmxcona
+WHERE id_rel_geo_cona = (SELECT value FROM agent_ids WHERE key='cona_artifact');
+DELETE FROM md_geo_cona WHERE id = (SELECT value FROM agent_ids WHERE key='cona_artifact');
+DELETE FROM md_geo_obm WHERE id = (SELECT value FROM agent_ids WHERE key='obm_artifact');
 
 INSERT INTO md_geo_lao (id, created_at, created_by, id_rel_verzije_modeli, id_lao, ime_lao, drugi_lao, geom)
 VALUES (

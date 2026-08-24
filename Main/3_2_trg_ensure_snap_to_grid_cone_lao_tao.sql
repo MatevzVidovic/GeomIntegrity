@@ -9,6 +9,7 @@ DROP TRIGGER IF EXISTS trg_refresh_hierarchy_from_cona ON md_geo_cona;
 DROP TRIGGER IF EXISTS trg_refresh_hierarchy_from_lao ON md_geo_lao;
 DROP FUNCTION IF EXISTS hierarchy_cascade();
 DROP FUNCTION IF EXISTS trg_ensure_snap_to_grid();
+DROP FUNCTION IF EXISTS hierarchy_fill_small_holes(geometry);
 DROP FUNCTION IF EXISTS hierarchy_refresh_cona(uuid);
 DROP FUNCTION IF EXISTS hierarchy_refresh_lao(uuid);
 DROP FUNCTION IF EXISTS hierarchy_refresh_tao(uuid);
@@ -37,6 +38,28 @@ RETURNS geometry LANGUAGE sql STABLE AS $$
     FROM md_geo_lao l WHERE l.id_rel_geo_tao = p_id AND l.geom IS NOT NULL
 $$;
 
+-- Union artifacts can leave tiny interior rings. Fill only rings that use the
+-- same "small topology problem" rule as OBM topology processing.
+CREATE FUNCTION hierarchy_fill_small_holes(p_geom geometry)
+RETURNS geometry LANGUAGE plpgsql IMMUTABLE AS $$
+DECLARE
+    v_geom geometry := p_geom; -- The trigger passes normalized geometry.
+    v_holes geometry;
+BEGIN
+    SELECT ST_Union(ring.geom)
+    INTO v_holes
+    FROM ST_Dump(v_geom) part
+    CROSS JOIN LATERAL ST_DumpRings(part.geom) ring
+    WHERE ring.path[1] > 0
+      AND is_small_obm_topology_problem(ring.geom);
+
+    IF v_holes IS NOT NULL THEN
+        v_geom := ensure_snap_to_grid(ST_Union(v_geom, v_holes));
+    END IF;
+    RETURN v_geom;
+END;
+$$;
+
 -- Child rows win whenever children exist, even if their derived union is NULL.
 CREATE FUNCTION trg_ensure_snap_to_grid()
 RETURNS trigger LANGUAGE plpgsql AS $$
@@ -48,20 +71,20 @@ BEGIN
             JOIN md_geo_obm o ON o.id = x.id_rel_geo_obm
             WHERE x.id_rel_geo_cona = NEW.id
         ) THEN SELECT hierarchy_cona_geom(NEW.id) INTO v_geom;
-        ELSE NEW.geom := ensure_snap_to_grid(NEW.geom); RETURN NEW;
+        ELSE v_geom := ensure_snap_to_grid(NEW.geom);
         END IF;
     ELSIF TG_TABLE_NAME = 'md_geo_lao' THEN
         IF EXISTS (SELECT 1 FROM md_geo_cona WHERE id_rel_geo_lao = NEW.id OR id_rel_geo_lao_rd1 = NEW.id)
         THEN SELECT hierarchy_lao_geom(NEW.id) INTO v_geom;
-        ELSE NEW.geom := ensure_snap_to_grid(NEW.geom); RETURN NEW;
+        ELSE v_geom := ensure_snap_to_grid(NEW.geom);
         END IF;
     ELSE
         IF EXISTS (SELECT 1 FROM md_geo_lao WHERE id_rel_geo_tao = NEW.id)
         THEN SELECT hierarchy_tao_geom(NEW.id) INTO v_geom;
-        ELSE NEW.geom := ensure_snap_to_grid(NEW.geom); RETURN NEW;
+        ELSE v_geom := ensure_snap_to_grid(NEW.geom);
         END IF;
     END IF;
-    NEW.geom := v_geom;
+    NEW.geom := hierarchy_fill_small_holes(v_geom);
     RETURN NEW;
 END;
 $$;
