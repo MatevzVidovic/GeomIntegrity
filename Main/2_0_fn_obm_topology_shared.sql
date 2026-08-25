@@ -53,6 +53,23 @@ AS $$
     );
 $$;
 
+CREATE OR REPLACE FUNCTION obm_geom_has_no_area_outside(
+    p_geom geometry,
+    p_boundary geometry,
+    p_grid_size double precision DEFAULT 0.01
+)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+    SELECT COALESCE(ST_Area(ST_Difference(
+        p_geom,
+        p_boundary,
+        p_grid_size
+    )), 0) = 0;
+$$;
+
 CREATE OR REPLACE FUNCTION preprocessing_is_small_obm_topology_problem(p_geom geometry)
 RETURNS boolean
 LANGUAGE sql
@@ -86,7 +103,8 @@ $$;
 CREATE OR REPLACE FUNCTION find_best_obm_neighbor_for_hole(
     p_id_rel_geo_verzija uuid,
     p_hole_geom geometry,
-    p_excluded_obm_id uuid DEFAULT NULL
+    p_excluded_obm_id uuid,
+    p_allow_overlap boolean
 )
 RETURNS uuid
 LANGUAGE sql
@@ -99,16 +117,38 @@ AS $$
             ST_Length(ST_Intersection(
                 ST_Boundary(obm.geom),
                 ST_Boundary(p_hole_geom)
-            )) AS shared_boundary
+            )) AS shared_boundary,
+            ST_Area(ST_Intersection(p_hole_geom, obm.geom)) AS overlap_area
         FROM md_geo_obm obm
         WHERE obm.id_rel_geo_verzija = p_id_rel_geo_verzija
           AND obm.geom IS NOT NULL
           AND (p_excluded_obm_id IS NULL OR obm.id <> p_excluded_obm_id)
-          AND ST_Touches(obm.geom, p_hole_geom)
+          AND ST_Intersects(obm.geom, p_hole_geom)
     ) candidates
     WHERE shared_boundary > 0
-    ORDER BY shared_boundary DESC, id
+       OR (
+           p_allow_overlap
+           AND overlap_area > 0
+       )
+    ORDER BY shared_boundary DESC, overlap_area DESC, id
     LIMIT 1;
+$$;
+
+CREATE OR REPLACE FUNCTION find_best_obm_neighbor_for_hole(
+    p_id_rel_geo_verzija uuid,
+    p_hole_geom geometry,
+    p_excluded_obm_id uuid DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT find_best_obm_neighbor_for_hole(
+        p_id_rel_geo_verzija,
+        p_hole_geom,
+        p_excluded_obm_id,
+        false
+    );
 $$;
 
 CREATE OR REPLACE FUNCTION get_obm_hole_candidates(p_id_rel_geo_verzija uuid)

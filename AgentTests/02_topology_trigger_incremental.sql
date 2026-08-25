@@ -55,6 +55,11 @@ VALUES
     ('small_hole_left', uuid_generate_v4()),
     ('small_hole_strip', uuid_generate_v4()),
     ('small_hole_right', uuid_generate_v4()),
+    ('border_split_version', uuid_generate_v4()),
+    ('border_split_parent', uuid_generate_v4()),
+    ('overlap_split_version', uuid_generate_v4()),
+    ('overlap_split_neighbor', uuid_generate_v4()),
+    ('overlap_split_parent', uuid_generate_v4()),
     ('delayed_version', uuid_generate_v4()),
     ('delayed_parent', uuid_generate_v4()),
     ('delayed_child', uuid_generate_v4()),
@@ -69,6 +74,7 @@ VALUES
     ('components_version', uuid_generate_v4()),
     ('components_neighbor', uuid_generate_v4()),
     ('components_overlap', uuid_generate_v4()),
+    ('components_point_neighbor', uuid_generate_v4()),
     ('components_transfer', uuid_generate_v4()),
     ('components_unmatched', uuid_generate_v4()),
     ('components_non_small', uuid_generate_v4()),
@@ -501,6 +507,171 @@ SELECT pg_temp.assert_true(
     'Delete-created small hole should not mutate another OBM from the row trigger'
 );
 
+\echo 'Case: a split update does not turn border precision debris into holes'
+TRUNCATE TABLE slo_meja;
+INSERT INTO slo_meja (id, created_at, created_by, geom)
+VALUES (
+    uuid_generate_v4(),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))', 3794)
+);
+
+INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='border_split_version'),
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    now()::timestamp,
+    99114,
+    false,
+    'AGENT_TEST_BORDER_SPLIT',
+    false
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='border_split_parent'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='border_split_version'),
+    'T_BORDER_SPLIT_PARENT',
+    ST_GeomFromText('POLYGON((0 0, 9 0, 9 10, 0 10, 0 0))', 3794)
+);
+
+-- This is the legitimate in-bound control that must survive reconciliation.
+INSERT INTO md_topoloske_kontrole_obm (
+    id, created_at, created_by, id_rel_geo_verzija,
+    tip_topoloskega_problema, geom, povrsina, obseg, kompaktnost
+)
+SELECT
+    uuid_generate_v4(), now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='border_split_version'),
+    'luknja', geom, ST_Area(geom), ST_Perimeter(geom), obm_topology_compactness(geom)
+FROM (
+    SELECT ST_GeomFromText(
+        'POLYGON((9 0, 10 0, 10 10, 9 10, 9 0))', 3794
+    ) AS geom
+) valid_hole;
+
+-- Reproduce a fixed-precision seam control straddling slo_meja immediately
+-- before LIFT writes the retained split part.
+INSERT INTO md_topoloske_kontrole_obm (
+    id, created_at, created_by, id_rel_geo_verzija,
+    tip_topoloskega_problema, geom, povrsina, obseg, kompaktnost
+)
+SELECT
+    uuid_generate_v4(), now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='border_split_version'),
+    'luknja', geom, ST_Area(geom), ST_Perimeter(geom), obm_topology_compactness(geom)
+FROM (
+    SELECT ST_GeomFromText(
+        'POLYGON((8.99 9.99, 9.01 9.99, 9.01 10.01, 8.99 10.01, 8.99 9.99))', 3794
+    ) AS geom
+) artifact;
+
+UPDATE md_geo_obm
+SET geom = ST_GeomFromText('POLYGON((0 0, 8.9 0, 8.9 10, 0 10, 0 0))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='border_split_parent');
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT COUNT(*) = 1
+           AND bool_and(COALESCE(ST_Area(ST_Difference(k.geom, s.geom, 0.01)), 0) = 0)
+           AND abs(SUM(ST_Area(k.geom)) - 11) < 1e-6
+        FROM md_topoloske_kontrole_obm k
+        CROSS JOIN slo_meja s
+        WHERE k.id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='border_split_version')
+          AND k.tip_topoloskega_problema = 'luknja'
+    ) AND (
+        SELECT abs(ST_Area(ST_Union(parts.geom, 0.01)) - ST_Area(s.geom)) < 1e-6
+        FROM (
+            SELECT geom FROM md_geo_obm
+            WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='border_split_version')
+            UNION ALL
+            SELECT geom FROM md_topoloske_kontrole_obm
+            WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='border_split_version')
+              AND tip_topoloskega_problema = 'luknja'
+        ) parts
+        CROSS JOIN slo_meja s
+        GROUP BY s.geom
+    ),
+    'Clipping border debris must preserve the existing control and the complete real in-bound gap'
+);
+
+\echo 'Case: slightly overlapping split seam is assigned locally'
+TRUNCATE TABLE slo_meja;
+INSERT INTO slo_meja (id, created_at, created_by, geom)
+VALUES (
+    uuid_generate_v4(), now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    ST_GeomFromText('POLYGON((0 0, 20 0, 20 10, 0 10, 0 0))', 3794)
+);
+
+INSERT INTO md_geo_obm_verzije (id, created_by, created_at, verzija_obmocja, zaklenjena, modeli, delovna_geo_coniranje)
+VALUES (
+    (SELECT value FROM agent_ids WHERE key='overlap_split_version'),
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    now()::timestamp, 99115, false, 'AGENT_TEST_OVERLAP_SPLIT', false
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES
+    (
+        (SELECT value FROM agent_ids WHERE key='overlap_split_neighbor'), now()::timestamp,
+        '00000000-0000-0000-0000-000000000000'::uuid,
+        (SELECT value FROM agent_ids WHERE key='overlap_split_version'),
+        'T_OVERLAP_SPLIT_NEIGHBOR',
+        ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))', 3794)
+    ),
+    (
+        (SELECT value FROM agent_ids WHERE key='overlap_split_parent'), now()::timestamp,
+        '00000000-0000-0000-0000-000000000000'::uuid,
+        (SELECT value FROM agent_ids WHERE key='overlap_split_version'),
+        'T_OVERLAP_SPLIT_PARENT',
+        ST_GeomFromText('POLYGON((10 0, 20 0, 20 10, 10 10, 10 0))', 3794)
+    );
+
+INSERT INTO md_topoloske_kontrole_obm (
+    id, created_at, created_by, id_rel_geo_verzija,
+    tip_topoloskega_problema, geom, povrsina, obseg, kompaktnost
+)
+SELECT
+    uuid_generate_v4(), now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='overlap_split_version'),
+    'luknja', geom, ST_Area(geom), ST_Perimeter(geom), obm_topology_compactness(geom)
+FROM (
+    SELECT ST_GeomFromText(
+        'POLYGON((9.99 4, 10.01 4, 10.01 6, 9.99 6, 9.99 4))', 3794
+    ) AS geom
+) artifact;
+
+UPDATE md_geo_obm
+SET geom = ST_GeomFromText('POLYGON((10.01 0, 20 0, 20 10, 10.01 10, 10.01 0))', 3794)
+WHERE id = (SELECT value FROM agent_ids WHERE key='overlap_split_parent');
+
+SELECT pg_temp.assert_true(
+    NOT EXISTS (
+        SELECT 1
+        FROM md_topoloske_kontrole_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='overlap_split_version')
+    ) AND (
+        SELECT ST_NumGeometries(o.geom) = 1
+           AND abs(ST_Area(o.geom) - 100.1) < 1e-6
+           AND COALESCE(ST_Area(ST_Difference(o.geom, s.geom, 0.01)), 0) = 0
+        FROM md_geo_obm o
+        CROSS JOIN slo_meja s
+        WHERE o.id = (SELECT value FROM agent_ids WHERE key='overlap_split_neighbor')
+    ) AND (
+        SELECT abs(ST_Area(ST_Union(geom, 0.01)) - 200) < 1e-6
+        FROM md_geo_obm
+        WHERE id_rel_geo_verzija = (SELECT value FROM agent_ids WHERE key='overlap_split_version')
+    ),
+    'The overlap-tolerant small-hole path should fix the seam without a control or multipart OBM'
+);
+
 \echo 'Case: LIFT Rezanje create -> original update -> workflow update'
 TRUNCATE TABLE slo_meja;
 INSERT INTO slo_meja (id, created_at, created_by, geom)
@@ -876,6 +1047,16 @@ SELECT pg_temp.assert_true(
 
 INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
 VALUES (
+    (SELECT value FROM agent_ids WHERE key='components_point_neighbor'),
+    now()::timestamp,
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    (SELECT value FROM agent_ids WHERE key='components_version'),
+    'T_COMPONENTS_POINT_NEIGHBOR',
+    ST_GeomFromText('POLYGON((130 0, 140 0, 130 10, 130 0))', 3794)
+);
+
+INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
+VALUES (
     (SELECT value FROM agent_ids WHERE key='components_unmatched'),
     now()::timestamp,
     '00000000-0000-0000-0000-000000000000'::uuid,
@@ -890,7 +1071,17 @@ SELECT pg_temp.assert_true(
         FROM md_geo_obm
         WHERE id = (SELECT value FROM agent_ids WHERE key='components_unmatched')
     ),
-    'A tiny secondary component without a touching neighbor should remain'
+    'A tiny secondary component with only point contact must remain on its source OBM'
+);
+
+SELECT pg_temp.assert_true(
+    find_best_obm_neighbor_for_hole(
+        (SELECT value FROM agent_ids WHERE key='components_version'),
+        ST_GeomFromText('POLYGON((140 0, 140.01 0, 140.01 10, 140 10, 140 0))', 3794),
+        (SELECT value FROM agent_ids WHERE key='components_unmatched'),
+        true
+    ) IS NULL,
+    'Overlap tolerance must not select a neighbor that only touches at a point'
 );
 
 INSERT INTO md_geo_obm (id, created_at, created_by, id_rel_geo_verzija, ime_obmocja, geom)
